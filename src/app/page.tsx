@@ -54,7 +54,7 @@ export default function ClinRxCopilot() {
 
   // Generate prescription draft
   const generateDraft = useCallback(async () => {
-    if (!patientSummary || !doctorNotes.trim()) {
+    if (!selectedPatient || !doctorNotes.trim()) {
       setError('Please load a patient and enter your notes');
       return;
     }
@@ -67,7 +67,7 @@ export default function ClinRxCopilot() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          patient_summary: patientSummary,
+          patient_id: selectedPatient,
           doctor_notes: doctorNotes,
         }),
       });
@@ -75,14 +75,20 @@ export default function ClinRxCopilot() {
       if (!res.ok) throw new Error('Failed to generate draft');
 
       const data = await res.json();
-      setDraft(data.draft);
-      setModelVersion(data.model_version);
+
+      // Handle the new API response format
+      if (data.draft) {
+        setDraft(data.draft);
+        setModelVersion(data.model_version || 'v1.0');
+      } else if (data.blocked) {
+        setError(data.block_reason || 'No suitable prescription found');
+      }
     } catch (err) {
       setError('Failed to generate prescription draft');
     } finally {
       setLoading(false);
     }
-  }, [patientSummary, doctorNotes]);
+  }, [selectedPatient, doctorNotes]);
 
   // Approve prescription (would save to DB in production)
   const approvePrescription = useCallback(() => {
@@ -274,7 +280,10 @@ export default function ClinRxCopilot() {
                     <div className="space-y-2">
                       {draft.warnings.map((w, i) => (
                         <Alert key={i} className="bg-yellow-500/20 border-yellow-500/50">
-                          <AlertDescription className="text-yellow-200">{w}</AlertDescription>
+                          <AlertDescription className="text-yellow-200">
+                            {w.drug && <span className="font-semibold">{w.drug}: </span>}
+                            {w.message}
+                          </AlertDescription>
                         </Alert>
                       ))}
                     </div>

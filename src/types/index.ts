@@ -58,16 +58,20 @@ export interface PrescriptionDraft {
     alternatives: {
         drug: string;
         brand?: string;
-        dose: string;
+        dose?: string;
         note: string;
         in_stock: boolean;
     }[];
-    warnings: string[];
-    interactions_checked: {
-        drug_pair: [string, string];
-        severity: 'minor' | 'moderate' | 'major' | 'contraindicated';
-        description: string;
+    warnings: {
+        type: string;
+        message: string;
+        drug?: string;
     }[];
+    interactions_checked: {
+        drug: string;
+        safe: boolean;
+    }[];
+    explanation?: string;
 }
 
 // API Request/Response types
