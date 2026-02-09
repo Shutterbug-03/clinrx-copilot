@@ -18,6 +18,8 @@ interface DoctorProfile {
     specialty: string;
 }
 
+const inputStyle = { color: '#000000' };
+
 export default function SettingsPage() {
     const [hospital, setHospital] = useState<HospitalSettings>({
         name: 'City Medical Center',
@@ -82,6 +84,7 @@ export default function SettingsPage() {
                                 type="text"
                                 value={hospital.name}
                                 onChange={(e) => setHospital({ ...hospital, name: e.target.value })}
+                                style={inputStyle}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                             />
                         </div>
@@ -91,6 +94,7 @@ export default function SettingsPage() {
                                 value={hospital.address}
                                 onChange={(e) => setHospital({ ...hospital, address: e.target.value })}
                                 rows={2}
+                                style={inputStyle}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                             />
                         </div>
@@ -101,6 +105,7 @@ export default function SettingsPage() {
                                     type="text"
                                     value={hospital.phone}
                                     onChange={(e) => setHospital({ ...hospital, phone: e.target.value })}
+                                    style={inputStyle}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                 />
                             </div>
@@ -110,6 +115,7 @@ export default function SettingsPage() {
                                     type="email"
                                     value={hospital.email}
                                     onChange={(e) => setHospital({ ...hospital, email: e.target.value })}
+                                    style={inputStyle}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                 />
                             </div>
@@ -121,6 +127,7 @@ export default function SettingsPage() {
                                 value={hospital.logo}
                                 onChange={(e) => setHospital({ ...hospital, logo: e.target.value })}
                                 placeholder="https://example.com/logo.png"
+                                style={inputStyle}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                             />
                         </div>
@@ -137,6 +144,7 @@ export default function SettingsPage() {
                                 type="text"
                                 value={doctor.name}
                                 onChange={(e) => setDoctor({ ...doctor, name: e.target.value })}
+                                style={inputStyle}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                             />
                         </div>
@@ -147,6 +155,7 @@ export default function SettingsPage() {
                                 value={doctor.qualifications}
                                 onChange={(e) => setDoctor({ ...doctor, qualifications: e.target.value })}
                                 placeholder="MBBS, MD, etc."
+                                style={inputStyle}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                             />
                         </div>
@@ -157,6 +166,7 @@ export default function SettingsPage() {
                                     type="text"
                                     value={doctor.regNumber}
                                     onChange={(e) => setDoctor({ ...doctor, regNumber: e.target.value })}
+                                    style={inputStyle}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                 />
                             </div>
@@ -166,6 +176,7 @@ export default function SettingsPage() {
                                     type="text"
                                     value={doctor.specialty}
                                     onChange={(e) => setDoctor({ ...doctor, specialty: e.target.value })}
+                                    style={inputStyle}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                 />
                             </div>

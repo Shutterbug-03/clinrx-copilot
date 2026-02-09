@@ -43,8 +43,33 @@ export interface Drug {
     in_stock: boolean;
 }
 
-// Prescription Draft (PRL Output)
+// Single Medication in a prescription
+export interface PrescriptionMedication {
+    id: string; // For editing/removing
+    category: 'primary' | 'adjunct' | 'continuation' | 'prophylaxis' | 'symptomatic';
+    drug: string;
+    brand?: string;
+    dose: string;
+    frequency: string;
+    duration: string;
+    route: string;
+    indication: string; // Why this drug is prescribed
+    reasoning: string;
+    confidence: number;
+    alternatives: {
+        drug: string;
+        dose: string;
+        reason: string;
+    }[];
+    editable: boolean;
+}
+
+// Prescription Draft (Updated for multiple medications)
 export interface PrescriptionDraft {
+    // NEW: Multiple medications array
+    medications: PrescriptionMedication[];
+
+    // Legacy: Keep for backward compatibility
     primary_recommendation: {
         drug: string;
         brand?: string;
@@ -72,6 +97,14 @@ export interface PrescriptionDraft {
         safe: boolean;
     }[];
     explanation?: string;
+
+    // NEW: Continuation medications
+    continuations: {
+        drug: string;
+        dose: string;
+        frequency: string;
+        reason: string;
+    }[];
 }
 
 // API Request/Response types

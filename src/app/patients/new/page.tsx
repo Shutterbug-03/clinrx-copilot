@@ -117,7 +117,8 @@ export default function NewPatientPage() {
                                     type="text"
                                     value={patient.name}
                                     onChange={(e) => setPatient({ ...patient, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                    style={{ color: '#000' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     placeholder="Enter patient name"
                                 />
                             </div>
@@ -129,7 +130,8 @@ export default function NewPatientPage() {
                                         type="number"
                                         value={patient.age}
                                         onChange={(e) => setPatient({ ...patient, age: e.target.value })}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                        style={{ color: '#000' }}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                         placeholder="Age"
                                     />
                                 </div>
@@ -138,7 +140,8 @@ export default function NewPatientPage() {
                                     <select
                                         value={patient.sex}
                                         onChange={(e) => setPatient({ ...patient, sex: e.target.value as 'M' | 'F' | 'Other' })}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                        style={{ color: '#000' }}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     >
                                         <option value="M">Male</option>
                                         <option value="F">Female</option>
@@ -153,7 +156,8 @@ export default function NewPatientPage() {
                                     type="tel"
                                     value={patient.phone}
                                     onChange={(e) => setPatient({ ...patient, phone: e.target.value })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                    style={{ color: '#000' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     placeholder="+91 98765 43210"
                                 />
                             </div>
@@ -164,7 +168,8 @@ export default function NewPatientPage() {
                                     type="text"
                                     value={patient.allergies}
                                     onChange={(e) => setPatient({ ...patient, allergies: e.target.value })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                    style={{ color: '#000' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     placeholder="Penicillin, Sulfa (comma-separated)"
                                 />
                             </div>
@@ -175,7 +180,8 @@ export default function NewPatientPage() {
                                     type="text"
                                     value={patient.conditions}
                                     onChange={(e) => setPatient({ ...patient, conditions: e.target.value })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                    style={{ color: '#000' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     placeholder="Diabetes, Hypertension (comma-separated)"
                                 />
                             </div>
@@ -186,7 +192,8 @@ export default function NewPatientPage() {
                                     value={patient.currentMeds}
                                     onChange={(e) => setPatient({ ...patient, currentMeds: e.target.value })}
                                     rows={4}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                                    style={{ color: '#000' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
                                     placeholder="Metformin 500mg BD&#10;Amlodipine 5mg OD&#10;(one per line)"
                                 />
                             </div>

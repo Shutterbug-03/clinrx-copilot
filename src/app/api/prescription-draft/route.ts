@@ -1,12 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { runPrescriptionPipeline } from '@/agents';
+import { generatePrescriptionDraft } from '@/agents/prescription-generator';
+import type { PatientSummary } from '@/types';
+
+// Mock patient data (same as before)
+const MOCK_PATIENTS: Record<string, PatientSummary> = {
+    'PT001': {
+        patient_id: 'PT001',
+        name: 'Rajesh Kumar',
+        age: 62,
+        sex: 'M',
+        chronic_conditions: ['Type 2 Diabetes', 'Hypertension', 'CKD Stage 3a'],
+        renal_status: { egfr: 48, ckd_stage: '3a' },
+        allergies: ['Penicillin', 'Sulfa drugs'],
+        current_meds: [
+            { drug: 'Metformin', dose: '500mg', frequency: 'BD' },
+            { drug: 'Losartan', dose: '50mg', frequency: 'OD' },
+            { drug: 'Amlodipine', dose: '5mg', frequency: 'OD' },
+        ],
+        prior_failures: [{ drug: 'Metformin', year: 2019, reason: 'GI intolerance at 1000mg' }],
+        key_vitals: { bp: '142/88', weight: 78 },
+        risk_flags: ['renal_dose_adjust', 'beta_lactam_allergy', 'elderly_patient', 'polypharmacy'],
+    },
+    'PT002': {
+        patient_id: 'PT002',
+        name: 'Priya Sharma',
+        age: 45,
+        sex: 'F',
+        chronic_conditions: ['Asthma', 'Hypothyroidism'],
+        renal_status: { egfr: 92 },
+        allergies: [],
+        current_meds: [
+            { drug: 'Levothyroxine', dose: '75mcg', frequency: 'OD' },
+            { drug: 'Salbutamol MDI', dose: '2 puffs', frequency: 'PRN' },
+        ],
+        prior_failures: [],
+        key_vitals: { bp: '118/76', weight: 62 },
+        risk_flags: [],
+    },
+};
 
 // Request validation
 const PrescriptionRequestSchema = z.object({
     patient_id: z.string().min(1),
     doctor_notes: z.string().min(1),
     doctor_id: z.string().optional().default('doctor-001'),
+    use_multi_drug: z.boolean().optional().default(true), // Enable new system by default
 });
 
 export async function POST(request: NextRequest) {
@@ -21,16 +61,57 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { patient_id, doctor_notes, doctor_id } = parsed.data;
+        const { patient_id, doctor_notes, doctor_id, use_multi_drug } = parsed.data;
 
         console.log(`[API] Prescription request for patient: ${patient_id}`);
+        console.log(`[API] Using multi-drug mode: ${use_multi_drug}`);
 
-        // Run the full 8-layer agentic pipeline
+        // Get patient data
+        const patient = MOCK_PATIENTS[patient_id];
+        if (!patient) {
+            return NextResponse.json(
+                { error: 'Patient not found', patient_id },
+                { status: 404 }
+            );
+        }
+
+        // Use new multi-drug generator
+        if (use_multi_drug) {
+            console.log('[API] Generating multi-drug prescription...');
+
+            const draft = await generatePrescriptionDraft(patient, doctor_notes, true);
+
+            return NextResponse.json({
+                success: true,
+                draft: {
+                    ...draft,
+                    // Ensure backward compatibility
+                    primary_recommendation: draft.primary_recommendation,
+                    alternatives: draft.alternatives,
+                    warnings: draft.warnings,
+                },
+                medications: draft.medications, // NEW: Full medications array
+                continuations: draft.continuations, // NEW: Continuation drugs
+                patient: {
+                    name: patient.name,
+                    age: patient.age,
+                    sex: patient.sex,
+                    chronic_conditions: patient.chronic_conditions,
+                    allergies: patient.allergies,
+                    current_meds: patient.current_meds,
+                    renal_status: patient.renal_status,
+                },
+                model_version: 'multi-drug-v1',
+                generated_at: new Date().toISOString(),
+            });
+        }
+
+        // Fallback to legacy single-drug pipeline
         const pipelineResult = await runPrescriptionPipeline({
             patientId: patient_id,
             doctorNotes: doctor_notes,
             doctorId: doctor_id || 'doctor-001',
-            useMockData: true, // Use mock for now until FHIR is configured
+            useMockData: true,
         });
 
         if (!pipelineResult.success || !pipelineResult.primaryRecommendation) {
@@ -44,7 +125,7 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Format response for frontend
+        // Format legacy response
         const response = {
             draft: {
                 primary_recommendation: {
@@ -70,7 +151,7 @@ export async function POST(request: NextRequest) {
                 })),
                 interactions_checked: pipelineResult.context.current_medications.map(m => ({
                     drug: m.drug,
-                    safe: true, // Would be determined by safety checks
+                    safe: true,
                 })),
                 explanation: pipelineResult.explanation.summary,
             },
