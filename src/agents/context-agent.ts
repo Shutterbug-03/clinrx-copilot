@@ -299,8 +299,8 @@ export async function aiEnhancedExtraction(
 
 export function getMockCompressedContext(patientId: string): CompressedContext {
     const mockContexts: Record<string, CompressedContext> = {
-        'patient-001': {
-            patient_id: 'patient-001',
+        'PT001': {
+            patient_id: 'PT001',
             demographics: {
                 name: 'Rajesh Kumar',
                 age: 62,
@@ -333,8 +333,8 @@ export function getMockCompressedContext(patientId: string): CompressedContext {
             extraction_confidence: 0.95,
             extracted_at: new Date().toISOString(),
         },
-        'patient-002': {
-            patient_id: 'patient-002',
+        'PT002': {
+            patient_id: 'PT002',
             demographics: {
                 name: 'Priya Sharma',
                 age: 45,
@@ -362,5 +362,5 @@ export function getMockCompressedContext(patientId: string): CompressedContext {
         },
     };
 
-    return mockContexts[patientId] || mockContexts['patient-001'];
+    return mockContexts[patientId] || mockContexts['PT001'];
 }
