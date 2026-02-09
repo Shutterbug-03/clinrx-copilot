@@ -64,7 +64,7 @@ export default function SettingsPage() {
                     </div>
                     <button
                         onClick={saveSettings}
-                        className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                        className="px-5 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600 transition-colors"
                     >
                         {saved ? '✓ Saved' : 'Save Settings'}
                     </button>
