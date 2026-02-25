@@ -56,7 +56,7 @@ async function runTest() {
         console.log('\n--- LIVE ALTERNATIVES (from FDA/RxNorm) ---');
         draft.alternatives.forEach((alt, i) => {
             console.log(`${i + 1}. ${alt.drug} (Brand: ${alt.brand}) - Stock: ${alt.in_stock ? '✅' : '❌'}`);
-            console.log(`   Note: ${alt.note}`);
+            console.log(`   Note: ${alt.reason}`);
         });
 
         console.log('\n--- EXPLANATION ---');

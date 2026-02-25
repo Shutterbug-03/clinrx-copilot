@@ -57,19 +57,16 @@ export interface PrescriptionMedication {
     indication: string; // Why this drug is prescribed
     reasoning: string;
     confidence: number;
-    alternatives: {
-        drug: string;
-        dose: string;
-        reason: string;
-    }[];
+    alternatives: PrescriptionAlternative[];
     editable: boolean;
+    in_stock?: boolean;
 }
 
 export interface PrescriptionAlternative {
     drug: string;
     brand?: string;
     dose?: string;
-    note: string;
+    reason: string; // Unified with MedicationCard
     in_stock: boolean;
 }
 

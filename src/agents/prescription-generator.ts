@@ -111,7 +111,8 @@ export async function generateMultiDrugPrescription(
             suggestedMed.indication || 'Detected Condition',
             `${suggestedMed.reasoning}${inventory.item ? ` (Match in Hospital Inventory: ${inventory.location})` : ''}`,
             0.9,
-            usedDrugs
+            usedDrugs,
+            !!inventory.item // Corrected Stock status
         );
 
         if (inventory.item) {
@@ -140,7 +141,8 @@ export async function generateMultiDrugPrescription(
                 'Chronic condition management',
                 'Continuation of existing therapy',
                 0.95,
-                usedDrugs
+                usedDrugs,
+                true // Assume chronic meds are in stock or available
             );
 
             continuations.push({
@@ -173,7 +175,8 @@ export async function generateMultiDrugPrescription(
             'GI Protection',
             'PPI co-prescription with NSAID to prevent gastric ulceration',
             0.90,
-            usedDrugs
+            usedDrugs,
+            true
         );
     }
 
@@ -190,6 +193,9 @@ export async function generateMultiDrugPrescription(
             warnings.push(...aiEnhancements.additionalWarnings);
         }
     }
+
+    const alternativesMap = await getAllAlternativesMapped(suggestedMeds.map(m => m.drug), patientSummary);
+    const allAlternatives = Object.values(alternativesMap).flat();
 
     // Build the prescription draft
     const draft: PrescriptionDraft = {
@@ -212,12 +218,25 @@ export async function generateMultiDrugPrescription(
             reasoning: ['No medications generated'],
             confidence: 0
         },
-        alternatives: await getAllAlternatives(suggestedMeds.map(m => m.drug), patientSummary),
+        alternatives: allAlternatives,
         warnings,
         interactions_checked: interactionsChecked,
         explanation: generateExplanation(medications),
         continuations
     };
+
+    // Step 7: Populate alternatives for individual medications correctly
+    for (const med of medications) {
+        med.alternatives = alternativesMap[med.drug] || [];
+        // If not found by exact drug name, try partial match (for brand vs generic cases)
+        if (med.alternatives.length === 0) {
+            const entry = Object.entries(alternativesMap).find(([key]) =>
+                med.drug.toLowerCase().includes(key.toLowerCase()) ||
+                key.toLowerCase().includes(med.drug.toLowerCase())
+            );
+            if (entry) med.alternatives = entry[1];
+        }
+    }
 
     console.log(`[MultiDrug] Generated ${medications.length} medications, ${warnings.length} warnings`);
 
@@ -312,7 +331,8 @@ function addMedication(
     indication: string,
     reasoning: string,
     confidence: number,
-    usedDrugs: Set<string>
+    usedDrugs: Set<string>,
+    inStock: boolean = false
 ): void {
     usedDrugs.add(generic.toLowerCase());
 
@@ -328,8 +348,9 @@ function addMedication(
         indication,
         reasoning,
         confidence,
-        alternatives: [], // Will be populated if needed
-        editable: true
+        alternatives: [], // Will be populated in generateMultiDrugPrescription
+        editable: true,
+        in_stock: inStock
     });
 }
 
@@ -400,29 +421,28 @@ async function shouldContinueMedication(drug: string, chronicConditions: string[
     return false;
 }
 
-async function getAllAlternatives(
+async function getAllAlternativesMapped(
     detectedDrugs: string[],
     patient: PatientSummary
-): Promise<PrescriptionAlternative[]> {
-    const alternatives: PrescriptionAlternative[] = [];
+): Promise<Record<string, PrescriptionAlternative[]>> {
+    const alternativesMap: Record<string, PrescriptionAlternative[]> = {};
 
-    // Map legacy patient summary to cleaner safety context
     const safetyContext = {
         allergies: patient.allergies || [],
         riskFlags: patient.risk_flags || []
     };
 
     for (const drug of detectedDrugs) {
-        // Find smart alternatives (Same Salt Brands OR Therapeutic Alternatives)
+        alternativesMap[drug] = [];
         try {
             const smartAlts = await getBestAlternative(drug, safetyContext);
 
             for (const alt of smartAlts) {
-                alternatives.push({
+                alternativesMap[drug].push({
                     drug: alt.drug,
                     brand: alt.brand || '',
                     dose: 'As directed',
-                    note: alt.type === 'therapeutic_alternative' ? `Therapeutic: ${alt.note}` : 'Same Salt Alternative',
+                    reason: alt.type === 'therapeutic_alternative' ? `Therapeutic: ${alt.note}` : 'Same Salt Alternative',
                     in_stock: alt.available || false
                 });
             }
@@ -431,7 +451,7 @@ async function getAllAlternatives(
         }
     }
 
-    return alternatives.slice(0, 10); // Show more variations if needed
+    return alternativesMap;
 }
 
 function generateExplanation(medications: PrescriptionMedication[]): string {

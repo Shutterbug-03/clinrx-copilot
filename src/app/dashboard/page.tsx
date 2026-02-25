@@ -139,6 +139,14 @@ function MedicationCard({
               <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100/50">
                 {med.category}
               </span>
+              {med.in_stock !== undefined && (
+                <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${med.in_stock
+                    ? 'text-teal-600 bg-teal-50 border-teal-100/50'
+                    : 'text-rose-500 bg-rose-50 border-rose-100/50'
+                  }`}>
+                  {med.in_stock ? 'In Stock' : 'Out of Stock'}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-8">
@@ -1047,8 +1055,9 @@ export default function Dashboard() {
           route: m.route,
           alternatives: m.alternatives?.map(alt => ({
             drug: alt.drug,
-            dose: alt.dose || '',
-            reason: alt.reason
+            dose: alt.dose || 'As directed',
+            reason: alt.reason,
+            in_stock: alt.in_stock,
           })) || [],
         })),
         warnings: draft?.warnings?.map(w => `${w.drug}: ${w.message}`) || [],
