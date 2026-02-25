@@ -4,6 +4,7 @@ export interface PatientSummary {
     name: string;
     age: number;
     sex: 'M' | 'F' | 'Other';
+    phone?: string;
     chronic_conditions: string[];
     renal_status: {
         egfr: number;
@@ -64,6 +65,14 @@ export interface PrescriptionMedication {
     editable: boolean;
 }
 
+export interface PrescriptionAlternative {
+    drug: string;
+    brand?: string;
+    dose?: string;
+    note: string;
+    in_stock: boolean;
+}
+
 // Prescription Draft (Updated for multiple medications)
 export interface PrescriptionDraft {
     // NEW: Multiple medications array
@@ -80,13 +89,7 @@ export interface PrescriptionDraft {
         reasoning: string[];
         confidence: number;
     };
-    alternatives: {
-        drug: string;
-        brand?: string;
-        dose?: string;
-        note: string;
-        in_stock: boolean;
-    }[];
+    alternatives: PrescriptionAlternative[];
     warnings: {
         type: string;
         message: string;

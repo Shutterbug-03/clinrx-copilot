@@ -170,103 +170,119 @@ export async function findEquivalents(
 }
 
 // ============================================================
-// GET BEST AVAILABLE ALTERNATIVE
+// AI THERAPEUTIC SELECTION
+// ============================================================
+
+import OpenAI from 'openai';
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+    if (!_openai && process.env.OPENAI_API_KEY) {
+        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
+    return _openai;
+}
+
+/**
+ * AI-driven fallback to find therapeutic alternatives based on clinical rules
+ */
+async function aiSuggestAlternatives(
+    drugName: string,
+    context: { allergies: string[]; riskFlags: string[] }
+): Promise<DrugEquivalent[]> {
+    const openai = getOpenAI();
+    if (!openai) return [];
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a clinical pharmacist. Suggest 2-3 therapeutic alternatives for a drug.
+Requirements:
+1. If patient has a beta-lactam/penicillin allergy, avoid ALL beta-lactams (penicillins, cephalosporins).
+2. Suggest alternatives from different drug classes that treat the same indication.
+3. Return ONLY a JSON array: [{ "drug": "Name", "type": "therapeutic_alternative", "note": "Reasoning..." }]`
+                },
+                {
+                    role: 'user',
+                    content: `Find safe alternatives for: ${drugName}
+Patient Allergies: ${context.allergies.join(', ')}
+Risk Flags: ${context.riskFlags.join(', ')}`
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+
+        const content = response.choices[0]?.message?.content || '{ "alternatives": [] }';
+        const parsed = JSON.parse(content);
+        return parsed.alternatives || [];
+    } catch (e) {
+        console.error('[Layer 5] AI Substitution failed:', e);
+        return [];
+    }
+}
+
+// ============================================================
+// GET BEST AVAILABLE ALTERNATIVE (Enhanced)
 // ============================================================
 
 export async function getBestAlternative(
     drugName: string,
-    context: { allergies: string[]; riskFlags: string[] }
-): Promise<DrugEquivalent | null> {
-    const result = await findEquivalents(drugName);
+    context: { allergies: string[]; riskFlags: string[] },
+    inventoryOnly = false
+): Promise<DrugEquivalent[]> {
+    console.log(`[Layer 5] Getting smart alternatives for: ${drugName}`);
 
-    // Filter out allergens
+    // 1. Get database/salt equivalents
+    const result = await findEquivalents(drugName);
+    const results: DrugEquivalent[] = [];
+
+    // 2. Filter primary equivalents for safety
     const safeEquivalents = result.equivalents.filter(eq => {
         const eqLower = eq.drug.toLowerCase();
-
-        // Check allergies
         for (const allergy of context.allergies) {
-            if (eqLower.includes(allergy.toLowerCase())) {
-                return false;
-            }
+            if (eqLower.includes(allergy.toLowerCase())) return false;
         }
-
-        // Check beta-lactam allergy for cephalosporins
         if (context.riskFlags.includes('beta_lactam_allergy')) {
-            if (eqLower.includes('cef') || eqLower.includes('penicillin') || eqLower.includes('amox')) {
-                return false;
-            }
+            if (eqLower.includes('cef') || eqLower.includes('penicillin') || eqLower.includes('amox')) return false;
         }
-
         return true;
     });
 
-    // Return best available
-    const available = safeEquivalents.find(eq => eq.available);
-    if (available) return available;
+    results.push(...safeEquivalents);
 
-    // Return highest confidence if none available
-    return safeEquivalents[0] || null;
+    // 3. If primary and salt-equivalents are dangerous or unavailable, trigger AI therapeutic alternative
+    const primaryIsUnsafe = context.allergies.some(a => drugName.toLowerCase().includes(a.toLowerCase())) ||
+        (context.riskFlags.includes('beta_lactam_allergy') && (drugName.toLowerCase().includes('amox') || drugName.toLowerCase().includes('cef')));
+
+    if (primaryIsUnsafe || results.length < 2) {
+        const aiAlts = await aiSuggestAlternatives(drugName, context);
+        results.push(...aiAlts);
+    }
+
+    // 4. Cross-reference with inventory
+    for (const res of results) {
+        const inv = await inventoryConnector.isAvailable(res.drug);
+        res.available = inv.available;
+    }
+
+    // Sort: Available first, then therapeutic vs salt priority
+    return results.sort((a, b) => {
+        if (a.available && !b.available) return -1;
+        if (!a.available && b.available) return 1;
+        return (b.confidence || 0.5) - (a.confidence || 0.5);
+    }).slice(0, 5);
 }
 
 // ============================================================
-// THERAPEUTIC ALTERNATIVE SUGGESTIONS
+// THERAPEUTIC ALTERNATIVE SUGGESTIONS (Legacy Wrapper)
 // ============================================================
 
 export function getTherapeuticAlternatives(
     indication: string,
     excludeDrugs: string[]
 ): CandidateTherapy[] {
-    const alternatives: CandidateTherapy[] = [];
-    const excludeSet = new Set(excludeDrugs.map(d => d.toLowerCase()));
-
-    // Indication-based alternatives
-    const indicationAlternatives: Record<string, CandidateTherapy[]> = {
-        'bacterial_respiratory': [
-            {
-                drug_class: 'Macrolide',
-                preferred_drug: 'Azithromycin',
-                generic_name: 'Azithromycin',
-                dose: '500mg',
-                frequency: 'OD',
-                duration: '3 days',
-                route: 'oral',
-                confidence: 0.80,
-                reasoning: ['Therapeutic alternative for beta-lactam allergy'],
-            },
-            {
-                drug_class: 'Fluoroquinolone',
-                preferred_drug: 'Levofloxacin',
-                generic_name: 'Levofloxacin',
-                dose: '500mg',
-                frequency: 'OD',
-                duration: '5 days',
-                route: 'oral',
-                confidence: 0.75,
-                reasoning: ['Reserve fluoroquinolone for penicillin/macrolide failure'],
-            },
-        ],
-        'uti': [
-            {
-                drug_class: 'Fluoroquinolone',
-                preferred_drug: 'Ciprofloxacin',
-                generic_name: 'Ciprofloxacin',
-                dose: '500mg',
-                frequency: 'BD',
-                duration: '3 days',
-                route: 'oral',
-                confidence: 0.85,
-                reasoning: ['Standard UTI coverage'],
-            },
-        ],
-    };
-
-    const indAlts = indicationAlternatives[indication] || indicationAlternatives['bacterial_respiratory'];
-
-    for (const alt of indAlts) {
-        if (!excludeSet.has(alt.generic_name.toLowerCase())) {
-            alternatives.push(alt);
-        }
-    }
-
-    return alternatives;
+    // Keeping for backward compatibility
+    return [];
 }

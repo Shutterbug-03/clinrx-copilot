@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getMockCompressedContext } from '@/agents';
+import { supabase, isDbConnected } from '@/lib/supabase';
 import type { CompressedContext } from '@/types/agents';
 
 // Request validation schema
@@ -51,15 +52,51 @@ export async function POST(request: NextRequest) {
 
         const { patient_id } = parsed.data;
 
-        // Use the new agentic Layer 1: Context Compression
-        const compressedContext = getMockCompressedContext(patient_id);
+        let summary: any = null;
+        let compressedContext: any = null;
 
-        // Convert to legacy format for frontend compatibility
-        const summary = toLegacyFormat(compressedContext);
+        // 1. Try to fetch from Supabase first
+        if (isDbConnected && supabase) {
+            const { data, error } = await supabase
+                .from('patients')
+                .select('summary')
+                .eq('fhir_id', patient_id)
+                .single();
+
+            if (!error && data) {
+                summary = data.summary;
+                // For compressed_context, we can map it back or just use a mock if it doesn't exist separately
+                compressedContext = summary; // Approximation
+            }
+        }
+
+        // 2. Fallback to Layer 1 Agent (FHIR or Mock)
+        if (!summary) {
+            const useFHIR = process.env.ENABLE_FHIR_INTEGRATION === 'true';
+
+            if (useFHIR) {
+                console.log(`[Context API] Fetching real FHIR context for: ${patient_id}`);
+                try {
+                    const { compressContext } = await import('@/agents/context-agent');
+                    compressedContext = await compressContext(patient_id);
+                    summary = toLegacyFormat(compressedContext);
+                } catch (e) {
+                    console.error('[Context API] FHIR Fetch failed, falling back to mock:', e);
+                    const { getMockCompressedContext } = await import('@/agents/context-agent');
+                    compressedContext = getMockCompressedContext(patient_id);
+                    summary = toLegacyFormat(compressedContext);
+                }
+            } else {
+                console.log(`[Context API] Fetching mock context for: ${patient_id}`);
+                const { getMockCompressedContext } = await import('@/agents/context-agent');
+                compressedContext = getMockCompressedContext(patient_id);
+                summary = toLegacyFormat(compressedContext);
+            }
+        }
 
         return NextResponse.json({
             summary,
-            compressed_context: compressedContext, // Also include full context
+            compressed_context: compressedContext,
             generated_at: new Date().toISOString(),
         });
     } catch (error) {

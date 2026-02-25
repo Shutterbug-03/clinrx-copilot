@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS patients (
   name TEXT,
   age INTEGER,
   sex TEXT,
+  phone TEXT,
   summary JSONB, -- CCE output: conditions, meds, allergies, vitals, flags
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

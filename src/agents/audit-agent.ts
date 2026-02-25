@@ -54,22 +54,27 @@ export async function createAuditEntry(params: {
     // Save to database if connected
     if (isDbConnected && supabase) {
         try {
+            // For clinical notes, normally we'd get this from the context, 
+            // but assuming the frontend will update the row later, or we just keep it blank.
+            const clinicalNotes = '';
+
+            // Map action to status
+            let status = 'draft';
+            if (entry.action === 'accepted' || entry.action === 'wrote_from_scratch') status = 'approved';
+            else if (entry.action === 'modified') status = 'modified';
+            else if (entry.action === 'rejected') status = 'rejected';
+
             const { error } = await supabase
-                .from('audit_log')
+                .from('prescriptions')
                 .insert({
                     id: entry.id,
-                    prescription_id: entry.prescription_id,
                     patient_id: entry.patient_id,
-                    doctor_id: entry.doctor_id,
+                    clinical_notes: clinicalNotes,
                     ai_draft: entry.ai_draft,
-                    action: entry.action,
-                    modifications: entry.modifications,
-                    override_reason: entry.override_reason,
                     final_prescription: entry.final_prescription,
-                    model_version: entry.model_version,
-                    context_snapshot: entry.context_snapshot,
-                    safety_checks: entry.safety_checks,
+                    status: status,
                     created_at: entry.created_at,
+                    updated_at: entry.created_at
                 });
 
             if (error) {

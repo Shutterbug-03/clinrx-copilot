@@ -5,12 +5,6 @@ import Link from 'next/link';
 import { PrescriptionTemplate } from '@/components/PrescriptionTemplate';
 import type { PatientSummary, PrescriptionDraft, PrescriptionMedication } from '@/types';
 
-// Demo patients
-const DEFAULT_PATIENTS = [
-  { id: 'PT001', name: 'Rajesh Kumar', age: 62, sex: 'M', conditions: 'DM, HTN, CKD' },
-  { id: 'PT002', name: 'Priya Sharma', age: 45, sex: 'F', conditions: 'Asthma, Thyroid' },
-];
-
 interface HospitalSettings {
   name: string;
   address: string;
@@ -69,13 +63,12 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   );
 }
 
-// Mobile Patient Card
 function PatientCard({
   patient,
   selected,
   onClick
 }: {
-  patient: typeof DEFAULT_PATIENTS[0];
+  patient: SelectablePatient;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -94,7 +87,7 @@ function PatientCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-900 truncate">{patient.name}</p>
-          <p className="text-sm text-slate-500">{patient.age} yrs • {patient.sex === 'M' ? 'Male' : 'Female'}</p>
+          <p className="text-sm text-slate-500">{patient.age} yrs • {patient.sex === 'M' ? 'Male' : 'Female'}{patient.phone ? ` • ${patient.phone}` : ''}</p>
         </div>
         {selected && (
           <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center">
@@ -314,10 +307,20 @@ function MobileEditModal({
   );
 }
 
+// Minimal type for the patient dropdown list
+interface SelectablePatient {
+  id: string;
+  name: string;
+  age: number;
+  sex: string;
+  conditions: string;
+  phone?: string;
+}
+
 interface DesktopLayoutProps {
-  patients: typeof DEFAULT_PATIENTS;
+  patients: SelectablePatient[];
   selectedPatient: string;
-  selectedPatientData: typeof DEFAULT_PATIENTS[0] | undefined;
+  selectedPatientData: SelectablePatient | undefined;
   patientSummary: PatientSummary | null;
   doctorNotes: string;
   setDoctorNotes: (notes: string | ((prev: string) => string)) => void;
@@ -338,9 +341,9 @@ interface DesktopLayoutProps {
 
 interface MobileLayoutProps {
   mobileStep: number;
-  patients: typeof DEFAULT_PATIENTS;
+  patients: SelectablePatient[];
   selectedPatient: string;
-  selectedPatientData: typeof DEFAULT_PATIENTS[0] | undefined;
+  selectedPatientData: SelectablePatient | undefined;
   patientSummary: PatientSummary | null;
   doctorNotes: string;
   setDoctorNotes: (notes: string | ((prev: string) => string)) => void;
@@ -358,8 +361,10 @@ interface MobileLayoutProps {
   setMobileStep: (step: number | ((prev: number) => number)) => void;
 }
 
-// Desktop Layout component definition updated to use props
+// ... skipped down to DesktopLayout ...
 const DesktopLayout = ({
+  // ... 
+
   patients,
   selectedPatient,
   selectedPatientData,
@@ -433,7 +438,7 @@ const DesktopLayout = ({
                   </div>
                   <div className="text-left">
                     <p className={`text-xs font-bold ${selectedPatient === p.id ? 'text-teal-900' : 'text-slate-700'}`}>{p.name}</p>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">{p.age}Y • {p.conditions.split(',')[0]}</p>
+                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">{p.age}Y • {p.conditions.split(',')[0]}{p.phone ? ` • ${p.phone}` : ''}</p>
                   </div>
                 </div>
                 {selectedPatient === p.id && <span className="text-teal-500 text-xs">✓</span>}
@@ -459,38 +464,44 @@ const DesktopLayout = ({
 
             <div className="flex-1 overflow-auto space-y-4 pr-1 scrollbar-hide">
               <div className="grid grid-cols-2 gap-4">
-                <div className="border-l-2 border-red-500/20 pl-2">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Allergies</p>
-                  <p className="text-[11px] font-bold text-red-600/80 leading-tight">
-                    {patientSummary.allergies.join(', ') || 'None'}
-                  </p>
-                </div>
+                {patientSummary.allergies.length > 0 && (
+                  <div className="border-l-2 border-red-500/20 pl-2">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Allergies</p>
+                    <p className="text-[11px] font-bold text-red-600/80 leading-tight">
+                      {patientSummary.allergies.join(', ')}
+                    </p>
+                  </div>
+                )}
                 <div className="border-l-2 border-amber-500/20 pl-2">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Renal</p>
                   <p className="text-[11px] font-bold text-slate-800">eGFR {patientSummary.renal_status.egfr}</p>
                 </div>
               </div>
 
-              <div className="border-l-2 border-slate-200 pl-2">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Conditions</p>
-                <div className="flex flex-wrap gap-1">
-                  {patientSummary.chronic_conditions.map((c, i) => (
-                    <span key={i} className="text-[10px] font-medium text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{c}</span>
-                  ))}
+              {patientSummary.chronic_conditions.length > 0 && (
+                <div className="border-l-2 border-slate-200 pl-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Conditions</p>
+                  <div className="flex flex-wrap gap-1">
+                    {patientSummary.chronic_conditions.map((c, i) => (
+                      <span key={i} className="text-[10px] font-medium text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{c}</span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="border-l-2 border-blue-500/20 pl-2">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Meds</p>
-                <div className="space-y-1">
-                  {patientSummary.current_meds.map((m, i) => (
-                    <div key={i} className="flex justify-between items-center text-[11px]">
-                      <span className="font-bold text-slate-700">{m.drug}</span>
-                      <span className="text-slate-400 font-medium px-1.5 py-0.5 rounded">{m.dose}</span>
-                    </div>
-                  ))}
+              {patientSummary.current_meds.length > 0 && (
+                <div className="border-l-2 border-blue-500/20 pl-2">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Meds</p>
+                  <div className="space-y-1">
+                    {patientSummary.current_meds.map((m, i) => (
+                      <div key={i} className="flex justify-between items-center text-[11px]">
+                        <span className="font-bold text-slate-700">{m.drug}</span>
+                        <span className="text-slate-400 font-medium px-1.5 py-0.5 rounded">{m.dose}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         ) : (
@@ -838,7 +849,7 @@ const MobileLayout = ({
 );
 
 export default function Dashboard() {
-  const [patients, setPatients] = useState(DEFAULT_PATIENTS);
+  const [patients, setPatients] = useState<SelectablePatient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
   const [patientSummary, setPatientSummary] = useState<PatientSummary | null>(null);
   const [doctorNotes, setDoctorNotes] = useState('');
@@ -850,6 +861,7 @@ export default function Dashboard() {
   const [hospital, setHospital] = useState<HospitalSettings | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [editingMed, setEditingMed] = useState<SelectableMedication | null>(null);
+  const [patientsLoading, setPatientsLoading] = useState(true);
 
   // Mobile: Step-based navigation (0: Patient, 1: Notes, 2: Review)
   const [mobileStep, setMobileStep] = useState(0);
@@ -857,20 +869,34 @@ export default function Dashboard() {
   useEffect(() => {
     const savedHospital = localStorage.getItem('clinrx_hospital');
     const savedDoctor = localStorage.getItem('clinrx_doctor');
-    const savedPatients = localStorage.getItem('clinrx_patients');
 
     if (savedHospital) setHospital(JSON.parse(savedHospital));
     if (savedDoctor) setDoctor(JSON.parse(savedDoctor));
-    if (savedPatients) {
-      const customPatients = JSON.parse(savedPatients);
-      setPatients([...DEFAULT_PATIENTS, ...customPatients.map((p: { id: string; name: string; age: string; sex: string; conditions: string[] }) => ({
-        id: p.id,
-        name: p.name,
-        age: parseInt(p.age),
-        sex: p.sex,
-        conditions: Array.isArray(p.conditions) ? p.conditions.join(', ') : p.conditions,
-      }))]);
-    }
+
+    // Fetch patients from Supabase API
+    const fetchPatients = async () => {
+      try {
+        const res = await fetch('/api/patients');
+        if (res.ok) {
+          const data = await res.json();
+          const loadedPatients: SelectablePatient[] = data.patients.map((p: PatientSummary) => ({
+            id: p.patient_id,
+            name: p.name,
+            age: p.age,
+            sex: p.sex,
+            phone: p.phone,
+            conditions: p.chronic_conditions?.join(', ') || 'None',
+          }));
+          setPatients(loadedPatients);
+        }
+      } catch (err) {
+        console.error('Failed to fetch patients:', err);
+      } finally {
+        setPatientsLoading(false);
+      }
+    };
+
+    fetchPatients();
   }, []);
 
   const loadPatient = useCallback(async (patientId: string) => {

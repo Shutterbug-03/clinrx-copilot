@@ -72,23 +72,26 @@ export default function NewPatientPage() {
 
     const savePatient = async () => {
         setSaving(true);
-        // Save to localStorage for demo
-        const patients = JSON.parse(localStorage.getItem('clinrx_patients') || '[]');
-        const newPatient = {
-            id: `patient-${Date.now()}`,
-            ...patient,
-            allergies: patient.allergies.split(',').map(a => a.trim()).filter(Boolean),
-            conditions: patient.conditions.split(',').map(c => c.trim()).filter(Boolean),
-            currentMeds: patient.currentMeds.split('\n').map(m => m.trim()).filter(Boolean),
-            createdAt: new Date().toISOString(),
-        };
-        patients.push(newPatient);
-        localStorage.setItem('clinrx_patients', JSON.stringify(patients));
+        try {
+            const res = await fetch('/api/patients/new', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patient),
+            });
 
-        setTimeout(() => {
+            if (res.ok) {
+                window.location.href = '/dashboard';
+            } else {
+                const data = await res.json();
+                console.error('Failed to save patient:', data.error);
+                alert('Failed to save patient. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error saving patient:', error);
+            alert('An unexpected error occurred.');
+        } finally {
             setSaving(false);
-            window.location.href = '/dashboard';
-        }, 1000);
+        }
     };
 
     return (

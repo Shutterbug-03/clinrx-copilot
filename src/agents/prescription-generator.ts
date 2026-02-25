@@ -14,13 +14,18 @@ import {
     type ConditionMapping,
     type DrugInfo
 } from '@/data/disease-drug-database';
+import { inventoryConnector } from '@/lib/connectors/inventory-connector';
 import type {
     PrescriptionDraft,
     PrescriptionMedication,
-    PatientSummary
+    PatientSummary,
+    PrescriptionAlternative
 } from '@/types';
 import type { CompressedContext } from '@/types/agents';
 import { preScreenDrug } from './safety-agent';
+import { openFDAClient } from '@/lib/connectors/openfda-client';
+import { medicalDataAggregator } from '@/lib/connectors/medical-aggregator';
+import { getBestAlternative } from './substitution-agent';
 
 // Lazy-initialized OpenAI client
 let _openai: OpenAI | null = null;
@@ -70,67 +75,47 @@ export async function generateMultiDrugPrescription(
     const interactionsChecked: { drug: string; safe: boolean }[] = [];
     const usedDrugs = new Set<string>(); // Prevent duplicates
 
-    // Step 1: Detect conditions from doctor notes
-    const detectedConditions = detectConditionsFromNotes(doctorNotes);
-    console.log('[MultiDrug] Detected conditions:', detectedConditions);
+    // Step 1: Dynamic AI Medication Selection (replacing hardcoded database)
+    const suggestedMeds = await aiSelectMedications(patientSummary, context, doctorNotes);
+    console.log('[MultiDrug] AI Suggested Medications:', suggestedMeds.length);
 
-    // Step 2: Add medications for each detected condition
-    for (const conditionKey of detectedConditions) {
-        const conditionData = DISEASE_DRUG_DATABASE[conditionKey];
-        if (!conditionData) continue;
+    // Step 2: Safety Screen and Inventory Tagging for each suggestion
+    for (const suggestedMed of suggestedMeds) {
+        if (usedDrugs.has(suggestedMed.drug.toLowerCase())) continue;
 
-        // Add all drugs for this condition
-        for (const drugInfo of conditionData.drugs) {
-            // Check if already added (same generic)
-            if (usedDrugs.has(drugInfo.generic.toLowerCase())) continue;
+        // Safety screening
+        const isSafe = await checkDrugSafety(suggestedMed.drug, context, patientSummary);
+        if (!isSafe.safe) {
+            warnings.push({
+                type: 'contraindication',
+                message: isSafe.reason,
+                drug: suggestedMed.drug
+            });
+            // AI suggested this, but safety agent blocked it - skip it
+            continue;
+        }
 
-            // Safety screening
-            const isSafe = await checkDrugSafety(drugInfo.generic, context, patientSummary);
-            if (!isSafe.safe) {
-                warnings.push({
-                    type: 'contraindication',
-                    message: isSafe.reason,
-                    drug: drugInfo.generic
-                });
-                // Try alternative
-                const alternative = conditionData.alternatives.find(alt =>
-                    !usedDrugs.has(alt.generic.toLowerCase())
-                );
-                if (alternative) {
-                    addMedication(
-                        medications,
-                        alternative.generic,
-                        alternative.brands[0] || '',
-                        alternative.dose,
-                        'BD', // Default
-                        '5-7 days',
-                        'oral',
-                        drugInfo.category,
-                        conditionData.name,
-                        `Alternative to ${drugInfo.generic}: ${alternative.reason}`,
-                        0.75,
-                        usedDrugs
-                    );
-                }
-                continue;
-            }
+        // Check inventory for this specific drug
+        const inventory = await inventoryConnector.findNearestWithStock(suggestedMed.drug);
+        const finalBrand = inventory.item?.brand || suggestedMed.brand || '';
 
-            addMedication(
-                medications,
-                drugInfo.generic,
-                drugInfo.brands[0] || '',
-                drugInfo.dose,
-                drugInfo.frequency,
-                drugInfo.duration,
-                drugInfo.route,
-                drugInfo.category,
-                conditionData.name,
-                conditionData.notes,
-                0.85,
-                usedDrugs
-            );
+        addMedication(
+            medications,
+            suggestedMed.drug,
+            finalBrand,
+            suggestedMed.dose,
+            suggestedMed.frequency || 'OD',
+            suggestedMed.duration || '5 days',
+            suggestedMed.route || 'oral',
+            'primary',
+            suggestedMed.indication || 'Detected Condition',
+            `${suggestedMed.reasoning}${inventory.item ? ` (Match in Hospital Inventory: ${inventory.location})` : ''}`,
+            0.9,
+            usedDrugs
+        );
 
-            interactionsChecked.push({ drug: drugInfo.generic, safe: true });
+        if (inventory.item) {
+            interactionsChecked.push({ drug: suggestedMed.drug, safe: true });
         }
     }
 
@@ -198,7 +183,7 @@ export async function generateMultiDrugPrescription(
             patientSummary,
             doctorNotes,
             medications,
-            detectedConditions
+            suggestedMeds.map(m => m.indication)
         );
 
         if (aiEnhancements.additionalWarnings) {
@@ -227,16 +212,88 @@ export async function generateMultiDrugPrescription(
             reasoning: ['No medications generated'],
             confidence: 0
         },
-        alternatives: getAllAlternatives(detectedConditions),
+        alternatives: await getAllAlternatives(suggestedMeds.map(m => m.drug), patientSummary),
         warnings,
         interactions_checked: interactionsChecked,
-        explanation: generateExplanation(medications, detectedConditions),
+        explanation: generateExplanation(medications),
         continuations
     };
 
     console.log(`[MultiDrug] Generated ${medications.length} medications, ${warnings.length} warnings`);
 
     return draft;
+}
+
+// ============================================================
+// AI SELECTION ENGINE
+// ============================================================
+
+interface AISuggestion {
+    drug: string;
+    brand?: string;
+    dose: string;
+    frequency: string;
+    duration: string;
+    route: string;
+    indication: string;
+    reasoning: string;
+}
+
+async function aiSelectMedications(
+    patient: PatientSummary,
+    context: CompressedContext,
+    doctorNotes: string
+): Promise<AISuggestion[]> {
+    const openai = getOpenAI();
+    if (!openai) {
+        console.warn('[MultiDrug] No OpenAI key, falling back to empty suggestions');
+        return [];
+    }
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a clinical decision support AI. 
+Suggest appropriate medications based on doctor notes and patient context.
+Rules:
+1. Return ONLY a JSON object with a "medications" array of objects.
+2. Account for allergies, age, and organ function (eGFR).
+3. Avoid interactions with current medications.
+4. Provide clinical reasoning for each choice.
+5. Use generic names primarily.
+
+Format: { "medications": [{ "drug": "Name", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`
+                },
+                {
+                    role: 'user',
+                    content: `
+Patient: ${patient.age}y ${patient.sex}, Weight: ${patient.key_vitals.weight}kg
+Conditions: ${patient.chronic_conditions.join(', ')}
+eGFR: ${patient.renal_status.egfr}
+Allergies: ${patient.allergies.join(', ')}
+Current Meds: ${patient.current_meds.map(m => `${m.drug} ${m.dose}`).join(', ')}
+Risk Flags: ${patient.risk_flags.join(', ')}
+
+Doctor's Clinical Notes: "${doctorNotes}"
+
+Suggest correct medications:`
+                }
+            ],
+            temperature: 0.1,
+            max_tokens: 1000,
+            response_format: { type: "json_object" }
+        });
+
+        const content = response.choices[0]?.message?.content || '{ "medications": [] }';
+        const parsed = JSON.parse(content);
+        return parsed.medications || [];
+    } catch (error) {
+        console.error('[MultiDrug] AI Selection failed:', error);
+        return [];
+    }
 }
 
 // ============================================================
@@ -259,12 +316,6 @@ function addMedication(
 ): void {
     usedDrugs.add(generic.toLowerCase());
 
-    const conditionKey = Object.keys(DISEASE_DRUG_DATABASE).find(key =>
-        DISEASE_DRUG_DATABASE[key].name === indication
-    );
-
-    const conditionData = conditionKey ? DISEASE_DRUG_DATABASE[conditionKey] : null;
-
     medications.push({
         id: `med-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         category,
@@ -277,11 +328,7 @@ function addMedication(
         indication,
         reasoning,
         confidence,
-        alternatives: conditionData?.alternatives.slice(0, 2).map(alt => ({
-            drug: alt.generic,
-            dose: alt.dose,
-            reason: alt.reason
-        })) || [],
+        alternatives: [], // Will be populated if needed
         editable: true
     });
 }
@@ -353,43 +400,48 @@ async function shouldContinueMedication(drug: string, chronicConditions: string[
     return false;
 }
 
-function getAllAlternatives(detectedConditions: string[]): { drug: string; brand?: string; dose?: string; note: string; in_stock: boolean }[] {
-    const alternatives: { drug: string; brand?: string; dose?: string; note: string; in_stock: boolean }[] = [];
+async function getAllAlternatives(
+    detectedDrugs: string[],
+    patient: PatientSummary
+): Promise<PrescriptionAlternative[]> {
+    const alternatives: PrescriptionAlternative[] = [];
 
-    for (const conditionKey of detectedConditions) {
-        const conditionData = DISEASE_DRUG_DATABASE[conditionKey];
-        if (!conditionData) continue;
+    // Map legacy patient summary to cleaner safety context
+    const safetyContext = {
+        allergies: patient.allergies || [],
+        riskFlags: patient.risk_flags || []
+    };
 
-        for (const alt of conditionData.alternatives.slice(0, 2)) {
-            alternatives.push({
-                drug: alt.generic,
-                brand: alt.brands[0],
-                dose: alt.dose,
-                note: alt.reason,
-                in_stock: true // Default, should come from inventory
-            });
+    for (const drug of detectedDrugs) {
+        // Find smart alternatives (Same Salt Brands OR Therapeutic Alternatives)
+        try {
+            const smartAlts = await getBestAlternative(drug, safetyContext);
+
+            for (const alt of smartAlts) {
+                alternatives.push({
+                    drug: alt.drug,
+                    brand: alt.brand || '',
+                    dose: 'As directed',
+                    note: alt.type === 'therapeutic_alternative' ? `Therapeutic: ${alt.note}` : 'Same Salt Alternative',
+                    in_stock: alt.available || false
+                });
+            }
+        } catch (e) {
+            console.warn(`[MultiDrug] Smart substitution failed for ${drug}`);
         }
     }
 
-    return alternatives.slice(0, 5); // Max 5 alternatives
+    return alternatives.slice(0, 10); // Show more variations if needed
 }
 
-function generateExplanation(medications: PrescriptionMedication[], conditions: string[]): string {
+function generateExplanation(medications: PrescriptionMedication[]): string {
     const numMeds = medications.length;
     const primaryMeds = medications.filter(m => m.category === 'primary');
-    const adjunctMeds = medications.filter(m => m.category === 'adjunct');
-    const continuations = medications.filter(m => m.category === 'continuation');
 
-    let explanation = `This prescription contains ${numMeds} medication(s) for ${conditions.length} identified condition(s). `;
+    let explanation = `This prescription contains ${numMeds} medication(s). `;
 
     if (primaryMeds.length > 0) {
         explanation += `Primary treatments: ${primaryMeds.map(m => m.drug).join(', ')}. `;
-    }
-    if (adjunctMeds.length > 0) {
-        explanation += `Supporting medications: ${adjunctMeds.map(m => m.drug).join(', ')}. `;
-    }
-    if (continuations.length > 0) {
-        explanation += `Continuation of chronic therapy: ${continuations.map(m => m.drug).join(', ')}. `;
     }
 
     return explanation;
@@ -461,36 +513,36 @@ export async function generatePrescriptionDraft(
             name: patient.name,
             age: patient.age,
             sex: patient.sex,
-            weight_kg: patient.key_vitals.weight || 70
+            weight_kg: patient.key_vitals?.weight || 70
         },
-        active_conditions: patient.chronic_conditions.map((c, i) => ({
+        active_conditions: (patient.chronic_conditions || []).map((c, i) => ({
             code: `COND-${i}`,
             display: c,
             onset_date: undefined,
             status: 'active' as const
         })),
-        allergies: patient.allergies.map(a => ({
-            substance: a,
+        allergies: (patient.allergies || []).map(a => ({
+            substance: typeof a === 'string' ? a : (a as any).substance,
             severity: 'moderate' as const,
             reaction: 'unknown',
             verified: true
         })),
-        current_medications: patient.current_meds.map(m => ({
+        current_medications: (patient.current_meds || []).map(m => ({
             drug: m.drug,
             dose: m.dose,
             frequency: m.frequency,
             prescriber: 'unknown'
         })),
         organ_function: {
-            egfr: patient.renal_status.egfr,
-            ckd_stage: patient.renal_status.ckd_stage
+            egfr: patient.renal_status?.egfr || 90,
+            ckd_stage: patient.renal_status?.ckd_stage || '1'
         },
-        prior_failures: patient.prior_failures.map(f => ({
+        prior_failures: (patient.prior_failures || []).map(f => ({
             drug: f.drug,
             reason: f.reason || 'unknown',
             year: f.year
         })),
-        risk_flags: patient.risk_flags,
+        risk_flags: patient.risk_flags || [],
         extraction_confidence: 0.95,
         extracted_at: new Date().toISOString()
     };

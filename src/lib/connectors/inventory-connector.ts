@@ -15,123 +15,97 @@ interface InventoryAdapter {
     checkAvailability(drugId: string): Promise<InventoryItem | null>;
 }
 
+import { supabase, isDbConnected } from '@/lib/supabase';
+
 // ============================================================
-// LOCAL PHARMACY ADAPTER (Mock for MVP)
+// SUPABASE PHARMACY ADAPTER (Real DB)
 // ============================================================
 
-class LocalPharmacyAdapter implements InventoryAdapter {
-    name = 'local_pharmacy';
-
-    private mockInventory: InventoryItem[] = [
-        {
-            drug_id: 'amox-500',
-            brand: 'Mox-500',
-            generic: 'Amoxicillin',
-            strength: '500mg',
-            formulation: 'capsule',
-            quantity_available: 100,
-            price: 85,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'cefuroxime-500',
-            brand: 'Ceftum',
-            generic: 'Cefuroxime',
-            strength: '500mg',
-            formulation: 'tablet',
-            quantity_available: 50,
-            price: 180,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'cefuroxime-250',
-            brand: 'Zinnat',
-            generic: 'Cefuroxime',
-            strength: '250mg',
-            formulation: 'tablet',
-            quantity_available: 75,
-            price: 120,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'azithro-500',
-            brand: 'Azithral',
-            generic: 'Azithromycin',
-            strength: '500mg',
-            formulation: 'tablet',
-            quantity_available: 0, // Out of stock
-            price: 95,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'metformin-500',
-            brand: 'Glycomet',
-            generic: 'Metformin',
-            strength: '500mg',
-            formulation: 'tablet',
-            quantity_available: 200,
-            price: 45,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'paracetamol-650',
-            brand: 'Dolo-650',
-            generic: 'Paracetamol',
-            strength: '650mg',
-            formulation: 'tablet',
-            quantity_available: 500,
-            price: 32,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'levoflox-500',
-            brand: 'Levomac',
-            generic: 'Levofloxacin',
-            strength: '500mg',
-            formulation: 'tablet',
-            quantity_available: 60,
-            price: 120,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-        {
-            drug_id: 'ciproflox-500',
-            brand: 'Ciplox',
-            generic: 'Ciprofloxacin',
-            strength: '500mg',
-            formulation: 'tablet',
-            quantity_available: 80,
-            price: 90,
-            location: 'Hospital Pharmacy',
-            source: 'local_pharmacy',
-            last_updated: new Date().toISOString(),
-        },
-    ];
+class SupabaseInventoryAdapter implements InventoryAdapter {
+    name = 'hospital_pharmacy';
 
     async searchDrug(query: string): Promise<InventoryItem[]> {
-        const q = query.toLowerCase();
-        return this.mockInventory.filter(
-            item =>
-                item.generic.toLowerCase().includes(q) ||
-                item.brand.toLowerCase().includes(q)
-        );
+        if (!isDbConnected || !supabase) {
+            console.warn('[SupabaseInventoryAdapter] DB not connected, returning empty list');
+            return [];
+        }
+
+        const q = `%${query.toLowerCase()}%`;
+
+        // We use inner join on inventory to get quantity
+        // The foreign key from inventory is drug_id -> drugs.id
+        const { data, error } = await supabase
+            .from('drugs')
+            .select(`
+                id,
+                inn,
+                brand,
+                strength,
+                formulation,
+                price,
+                inventory!inner (
+                    location,
+                    quantity
+                )
+            `)
+            .or(`inn.ilike.${q},brand.ilike.${q}`);
+
+        if (error) {
+            console.error('[SupabaseInventoryAdapter] Error searching drugs:', error);
+            return [];
+        }
+
+        return data.map((item: any) => ({
+            drug_id: item.id,
+            brand: item.brand,
+            generic: item.inn,
+            strength: item.strength,
+            formulation: item.formulation,
+            // Assuming first inventory location matches
+            quantity_available: item.inventory?.[0]?.quantity || 0,
+            price: item.price,
+            location: item.inventory?.[0]?.location || 'Main Pharmacy',
+            source: 'hospital' as const,
+            last_updated: new Date().toISOString()
+        }));
     }
 
     async checkAvailability(drugId: string): Promise<InventoryItem | null> {
-        return this.mockInventory.find(item => item.drug_id === drugId) || null;
+        if (!isDbConnected || !supabase) return null;
+
+        const { data, error } = await supabase
+            .from('drugs')
+            .select(`
+                id,
+                inn,
+                brand,
+                strength,
+                formulation,
+                price,
+                inventory!inner (
+                    location,
+                    quantity
+                )
+            `)
+            .eq('id', drugId)
+            .single();
+
+        if (error || !data) {
+            return null;
+        }
+
+        return {
+            drug_id: data.id,
+            brand: data.brand,
+            generic: data.inn,
+            strength: data.strength,
+            formulation: data.formulation,
+            quantity_available: data.inventory?.[0]?.quantity || 0,
+            price: data.price,
+            location: data.inventory?.[0]?.location || 'Main Pharmacy',
+            source: 'hospital' as const,
+            last_updated: new Date().toISOString()
+        };
     }
 }
 
@@ -196,7 +170,7 @@ class InventoryConnector {
 
     constructor() {
         // Register adapters in priority order
-        this.adapters.push(new LocalPharmacyAdapter());
+        this.adapters.push(new SupabaseInventoryAdapter());
         this.adapters.push(new ExternalPharmacyAdapter());
     }
 
@@ -272,8 +246,8 @@ class InventoryConnector {
 
         // Sort by source priority (local first) then by location
         available.sort((a, b) => {
-            if (a.source === 'local_pharmacy' && b.source !== 'local_pharmacy') return -1;
-            if (a.source !== 'local_pharmacy' && b.source === 'local_pharmacy') return 1;
+            if (a.source === 'hospital' && b.source !== 'hospital') return -1;
+            if (a.source !== 'hospital' && b.source === 'hospital') return 1;
             return 0;
         });
 
@@ -287,4 +261,4 @@ class InventoryConnector {
 // Singleton
 export const inventoryConnector = new InventoryConnector();
 
-export { InventoryConnector, LocalPharmacyAdapter, ExternalPharmacyAdapter };
+export { InventoryConnector, SupabaseInventoryAdapter, ExternalPharmacyAdapter };
