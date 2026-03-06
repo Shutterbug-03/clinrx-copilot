@@ -49,7 +49,7 @@ export class BedrockAdapter {
 
         // Create an AbortController to timeout the Bedrock request if it takes too long
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
         try {
             const response = await this.client.send(command, { abortSignal: controller.signal as any });

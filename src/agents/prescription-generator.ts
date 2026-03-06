@@ -279,16 +279,19 @@ Risk Flags: ${patient.risk_flags.join(', ')}
         const prompt = bedrockAdapter.formatPrompt(patientSummaryStr, doctorNotes) +
             `\nYou must ONLY recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin, Pan-D) and provide realistic dosages available in the Indian market.\nFormat: { "medications": [{ "drug": "Name", "brand": "Optional", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`;
 
+        console.log('[MultiDrug] Calling AI Engine (Bedrock w/ Fallback)...');
         const responseText = await bedrockAdapter.invokeModel(prompt);
+        console.log('[MultiDrug] AI Raw Response Length:', responseText.length);
 
         // Claude sometimes wraps JSON in markdown blocks
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         const jsonString = jsonMatch ? jsonMatch[0] : responseText;
 
         const parsed = JSON.parse(jsonString);
+        console.log('[MultiDrug] AI Parsed Medications:', parsed.medications?.length || 0);
         return parsed.medications || [];
     } catch (error) {
-        console.error('[MultiDrug] AI Selection via Bedrock failed:', error);
+        console.error('[MultiDrug] AI Selection via Bedrock/OpenAI failed:', error);
         return [];
     }
 }

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
         // Add timeout to prevent 504 Gateway Timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         // Convert base64 data URI to raw bytes
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
