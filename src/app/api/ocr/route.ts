@@ -76,19 +76,24 @@ Only return the JSON, no other text.`
 
         let content = '{}';
 
+        const ocrStart = Date.now();
         try {
             if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+                console.log(`[OCR_API] Triggering Bedrock OCR (Size: ${imageBuffer.length} bytes)`);
                 const response = await client.send(command, { abortSignal: controller.signal as any });
                 clearTimeout(timeoutId);
                 content = response.output?.message?.content?.[0]?.text || '{}';
+                console.log(`[OCR_API] Bedrock finished in ${Date.now() - ocrStart}ms`);
             } else {
                 throw new Error("AWS credentials missing, jumping to fallback");
             }
         } catch (bedrockError: any) {
             clearTimeout(timeoutId);
             const isTimeout = bedrockError.name === 'AbortError';
-            console.warn(`[OCR API] Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}, attempting OpenAI fallback...`, bedrockError.message);
+            console.warn(`[OCR_API] Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}, attempting OpenAI fallback...`, bedrockError.message);
             if (process.env.OPENAI_API_KEY) {
+                console.log("[OCR_API] Triggering OpenAI Vision fallback...");
+                const fallbackStart = Date.now();
                 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
                 const fallbackResponse = await openai.chat.completions.create({
                     model: 'gpt-4o-mini',
@@ -122,6 +127,7 @@ Only return the JSON, no other text.`,
                     max_tokens: 500,
                 });
                 content = fallbackResponse.choices[0]?.message?.content || '{}';
+                console.log(`[OCR_API] OpenAI fallback finished in ${Date.now() - fallbackStart}ms`);
             } else {
                 throw new Error("Both Bedrock and OpenAI OCR failed.");
             }

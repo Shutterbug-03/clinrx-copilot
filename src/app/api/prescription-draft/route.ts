@@ -29,13 +29,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const startTime = Date.now();
         const { patient_id, doctor_notes, doctor_id, use_multi_drug } = parsed.data;
 
-        console.log(`[API] Prescription request for patient: ${patient_id}`);
-        console.log(`[API] Using multi-drug mode: ${use_multi_drug}`);
+        console.log(`[API_START] Patient: ${patient_id} | Multi-Drug: ${use_multi_drug}`);
 
-        // Use database adapter (DynamoDB → Supabase → Mock Data)
+        // Use database adapter
+        const dbStart = Date.now();
         const patient = await db.getPatient(patient_id);
+        console.log(`[API_DB_END] Patient lookup took ${Date.now() - dbStart}ms`);
 
         if (!patient) {
             return NextResponse.json(
@@ -46,9 +48,13 @@ export async function POST(request: NextRequest) {
 
         // Use new multi-drug generator
         if (use_multi_drug) {
-            console.log('[API] Generating multi-drug prescription...');
-
+            console.log('[API_AI_START] Triggering Llama 3 Reasoning...');
+            const aiStart = Date.now();
             const draft = await generatePrescriptionDraft(patient, doctor_notes, true);
+            console.log(`[API_AI_END] AI Reasoning took ${Date.now() - aiStart}ms`);
+
+            const totalTime = Date.now() - startTime;
+            console.log(`[API_FINISH] Total execution: ${totalTime}ms`);
 
             return NextResponse.json({
                 success: true,
