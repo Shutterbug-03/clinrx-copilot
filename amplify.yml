@@ -5,7 +5,7 @@ frontend:
       commands:
         - npm ci
         # Bulk load environment variables from a single JSON string if provided
-        - node -e 'if (process.env.AMPLIFY_ENV_JSON) { const env = JSON.parse(process.env.AMPLIFY_ENV_JSON); const content = Object.entries(env).map(([k,v]) => `${k}=${v}`).join("\n"); require("fs").writeFileSync(".env.production", content); console.log("Keys loaded into .env.production:", Object.keys(env).join(", ")); }'
+        - node -e 'try { if (process.env.AMPLIFY_ENV_JSON) { const env = JSON.parse(process.env.AMPLIFY_ENV_JSON); const content = Object.entries(env).map(([k,v]) => `${k}=${v}`).join("\n"); require("fs").writeFileSync(".env.production", content); console.log("Keys loaded into .env.production:", Object.keys(env).join(", ")); } } catch (e) { console.error("❌ AMPLIFY_ENV_JSON error:", e.message); process.exit(1); }'
     build:
       commands:
         # Source the env file or let Next.js find it
