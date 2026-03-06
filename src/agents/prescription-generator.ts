@@ -77,11 +77,10 @@ export async function generateMultiDrugPrescription(
     const suggestedMeds = await aiSelectMedications(patientSummary, context, doctorNotes);
     console.log('[MultiDrug] AI Suggested Medications:', suggestedMeds.length);
 
-    // Step 2: Safety Screen and Inventory Tagging for each suggestion
-    for (const suggestedMed of suggestedMeds) {
-        if (usedDrugs.has(suggestedMed.drug.toLowerCase())) continue;
+    // Step 2: Safety Screen and Inventory Tagging (Parallelized)
+    const processedMedsResults = await Promise.all(suggestedMeds.map(async (suggestedMed) => {
+        if (usedDrugs.has(suggestedMed.drug.toLowerCase())) return null;
 
-        // Safety screening
         const isSafe = await checkDrugSafety(suggestedMed.drug, context, patientSummary);
         if (!isSafe.safe) {
             warnings.push({
@@ -89,14 +88,18 @@ export async function generateMultiDrugPrescription(
                 message: isSafe.reason,
                 drug: suggestedMed.drug
             });
-            // AI suggested this, but safety agent blocked it - skip it
-            continue;
+            return null;
         }
 
-        // Check inventory for this specific drug
         const inventory = await inventoryConnector.findNearestWithStock(suggestedMed.drug);
         const finalBrand = inventory.item?.brand || suggestedMed.brand || '';
 
+        return { suggestedMed, inventory, finalBrand };
+    }));
+
+    for (const res of processedMedsResults) {
+        if (!res) continue;
+        const { suggestedMed, inventory, finalBrand } = res;
         addMedication(
             medications,
             suggestedMed.drug,
@@ -110,7 +113,7 @@ export async function generateMultiDrugPrescription(
             `${suggestedMed.reasoning}${inventory.item ? ` (Match in Hospital Inventory: ${inventory.location})` : ''}`,
             0.9,
             usedDrugs,
-            !!inventory.item // Corrected Stock status
+            !!inventory.item
         );
 
         if (inventory.item) {
@@ -118,12 +121,11 @@ export async function generateMultiDrugPrescription(
         }
     }
 
-    // Step 3: Add continuation medications for chronic conditions
     const continuations: { drug: string; dose: string; frequency: string; reason: string }[] = [];
 
-    for (const med of patientSummary.current_meds) {
-        // Check if this is for a chronic condition that should continue
-        if (usedDrugs.has(med.drug.toLowerCase())) continue;
+    // Step 3: Add continuation medications for chronic conditions (Parallelized)
+    await Promise.all(patientSummary.current_meds.map(async (med) => {
+        if (usedDrugs.has(med.drug.toLowerCase())) return;
 
         const shouldContinue = await shouldContinueMedication(med.drug, patientSummary.chronic_conditions);
         if (shouldContinue) {
@@ -150,7 +152,7 @@ export async function generateMultiDrugPrescription(
                 reason: 'Continue current therapy for chronic condition'
             });
         }
-    }
+    }));
 
     // Step 4: Add GI protection if NSAIDs prescribed
     const hasNSAID = medications.some(m =>
@@ -413,7 +415,7 @@ async function getAllAlternativesMapped(
         riskFlags: patient.risk_flags || []
     };
 
-    for (const drug of detectedDrugs) {
+    await Promise.all(detectedDrugs.map(async (drug) => {
         alternativesMap[drug] = [];
         try {
             const smartAlts = await getBestAlternative(drug, safetyContext);
@@ -428,9 +430,9 @@ async function getAllAlternativesMapped(
                 });
             }
         } catch (e) {
-            console.warn(`[MultiDrug] Smart substitution failed for ${drug}`);
+            console.warn(`[MultiDrug] Smart substitution failed for ${drug}, falling back to empty alternatives for this drug.`);
         }
-    }
+    }));
 
     return alternativesMap;
 }

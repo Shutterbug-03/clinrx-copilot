@@ -114,41 +114,50 @@ export async function findEquivalents(
     if (matchedDrug && DRUG_EQUIVALENTS[matchedDrug]) {
         const config = DRUG_EQUIVALENTS[matchedDrug];
 
-        // Same salt equivalents (highest confidence)
+        // Create an array of promises for inventory checks
+        const checkPromises: Promise<any>[] = [];
+
+        // Same salt equivalents
         for (const salt of config.salts) {
-            const availability = await inventoryConnector.isAvailable(salt, requiredStrength);
-            equivalents.push({
-                drug: salt,
-                type: 'same_salt',
-                confidence: 0.98,
-                available: availability.available,
-            });
+            checkPromises.push(
+                inventoryConnector.isAvailable(salt, requiredStrength).then(availability => ({
+                    drug: salt,
+                    type: 'same_salt',
+                    confidence: 0.98,
+                    available: availability.available,
+                }))
+            );
         }
 
         // Brand equivalents
         for (const brand of config.brands) {
-            const availability = await inventoryConnector.isAvailable(brand, requiredStrength);
-            equivalents.push({
-                drug: brand,
-                brand: brand,
-                type: 'same_strength',
-                confidence: 0.95,
-                available: availability.available,
-            });
+            checkPromises.push(
+                inventoryConnector.isAvailable(brand, requiredStrength).then(availability => ({
+                    drug: brand,
+                    brand: brand,
+                    type: 'same_strength',
+                    confidence: 0.95,
+                    available: availability.available,
+                }))
+            );
         }
 
         // Same class alternatives
         for (const alt of config.same_class) {
-            const availability = await inventoryConnector.isAvailable(alt.drug);
-            equivalents.push({
-                drug: alt.drug,
-                type: 'same_class',
-                confidence: 0.75,
-                note: alt.note,
-                pk_differences: alt.note,
-                available: availability.available,
-            });
+            checkPromises.push(
+                inventoryConnector.isAvailable(alt.drug).then(availability => ({
+                    drug: alt.drug,
+                    type: 'same_class',
+                    confidence: 0.75,
+                    note: alt.note,
+                    pk_differences: alt.note,
+                    available: availability.available,
+                }))
+            );
         }
+
+        const results = await Promise.all(checkPromises);
+        equivalents.push(...results);
     }
 
     // Check primary availability
@@ -253,11 +262,11 @@ export async function getBestAlternative(
         results.push(...aiAlts);
     }
 
-    // 4. Cross-reference with inventory
-    for (const res of results) {
+    // 4. Cross-reference with inventory (Parallelized)
+    await Promise.all(results.map(async (res) => {
         const inv = await inventoryConnector.isAvailable(res.drug);
         res.available = inv.available;
-    }
+    }));
 
     // Sort: Available first, then therapeutic vs salt priority
     return results.sort((a, b) => {

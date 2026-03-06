@@ -46,13 +46,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Use new multi-drug generator
+        // Use new multi-drug generator with performance racing
         if (use_multi_drug) {
             console.log('[API_AI_START] Triggering Llama 3 Reasoning...');
             const aiStart = Date.now();
-            const draft = await generatePrescriptionDraft(patient, doctor_notes, true);
-            console.log(`[API_AI_END] AI Reasoning took ${Date.now() - aiStart}ms`);
 
+            // Promise race to beat the Amplify 28-30s timeout
+            const draft = await Promise.race([
+                generatePrescriptionDraft(patient, doctor_notes, true),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 26000))
+            ]);
+
+            if (draft === null) {
+                console.warn('[API_TIMEOUT] Circuit breaker hit at 26s. Returning timeout error.');
+                return NextResponse.json(
+                    { error: 'The AI reasoning took too long to complete. Please try with shorter notes.', timeout: true },
+                    { status: 504 }
+                );
+            }
+
+            console.log(`[API_AI_END] AI Reasoning took ${Date.now() - aiStart}ms`);
             const totalTime = Date.now() - startTime;
             console.log(`[API_FINISH] Total execution: ${totalTime}ms`);
 
