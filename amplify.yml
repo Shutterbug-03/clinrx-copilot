@@ -4,6 +4,8 @@ frontend:
     preBuild:
       commands:
         - npm ci
+        # Bulk load environment variables from a single JSON string if provided
+        - node -e 'if (process.env.AMPLIFY_ENV_JSON) { const env = JSON.parse(process.env.AMPLIFY_ENV_JSON); const content = Object.entries(env).map(([k,v]) => `${k}=${v}`).join("\n"); require("fs").writeFileSync(".env.production", content); console.log("Successfully loaded environment from AMPLIFY_ENV_JSON"); }'
     build:
       commands:
         - npm run build
