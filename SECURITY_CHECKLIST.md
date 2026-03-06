@@ -14,7 +14,7 @@
 
 Even though your keys are not in the git history, they were visible in your local `.env.local` file. For maximum security, you should revoke and regenerate these keys:
 
-### 1. OpenAI API Key
+### 1. AWS Bedrock API Key
 **Current Key (REVOKE THIS):** `sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
 
 **Action Required:**

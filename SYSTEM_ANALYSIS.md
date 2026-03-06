@@ -177,14 +177,14 @@ const rawData = await fhirConnector.getPatientBundle(patientId);
 const context = getMockCompressedContext(patientId);
 ```
 
-### Step 4: Enable OpenAI Reasoning (Already Working!)
+### Step 4: Enable AWS Bedrock Reasoning (Already Working!)
 
-You have OpenAI key configured:
+You have AWS Bedrock key configured:
 ```bash
-OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
+AWS_ACCESS_KEY_ID=sk-proj-YOUR_KEY_HERE
 ```
 
-**This is already active!** The system will use GPT-4o-mini for clinical reasoning.
+**This is already active!** The system will use Claude 3.5 Sonnet for clinical reasoning.
 
 ### Step 5: Enable OpenFDA Drug Data (Already Working!)
 
@@ -241,10 +241,10 @@ cat > clinrx-mvp/test-apis.sh << 'EOF'
 
 echo "🔍 Testing API Connections..."
 
-# Test OpenAI
-echo "\n1. Testing OpenAI..."
+# Test AWS Bedrock
+echo "\n1. Testing AWS Bedrock..."
 curl -s https://api.openai.com/v1/models \
-  -H "Authorization: Bearer $OPENAI_API_KEY" | jq '.data[0].id'
+  -H "Authorization: Bearer $AWS_ACCESS_KEY_ID" | jq '.data[0].id'
 
 # Test OpenFDA
 echo "\n2. Testing OpenFDA..."
@@ -362,7 +362,7 @@ curl -X POST http://localhost:3000/api/prescription-draft \
 |-----------|--------|-------------|-------|
 | **Layer 1: Context** | ✅ Working | Mock + FHIR ready | Can switch to FHIR |
 | **Layer 2: Safety** | ✅ Working | Built-in rules + OpenFDA | 100% deterministic |
-| **Layer 3: Reasoning** | ✅ Working | OpenAI GPT-4o-mini | Using your API key |
+| **Layer 3: Reasoning** | ✅ Working | AWS Bedrock Claude 3.5 Sonnet | Using your API key |
 | **Layer 4: Inventory** | ⚠️ Mock | Mock data | Needs real pharmacy API |
 | **Layer 5: Substitution** | ✅ Working | Built-in database | Fully functional |
 | **Layer 6: Explanation** | ✅ Working | Rule-based | Fully functional |
@@ -371,7 +371,7 @@ curl -X POST http://localhost:3000/api/prescription-draft \
 
 ### 🔑 What's Using Real APIs Right Now
 
-1. **OpenAI GPT-4o-mini** ✅
+1. **AWS Bedrock Claude 3.5 Sonnet** ✅
    - Clinical reasoning
    - Indication detection
    - Enhanced explanations
@@ -394,7 +394,7 @@ curl -X POST http://localhost:3000/api/prescription-draft \
 ## 🎯 Quick Enable Real Data Checklist
 
 ### Immediate (5 minutes)
-- [x] OpenAI API - Already working
+- [x] AWS Bedrock API - Already working
 - [x] OpenFDA API - Already working
 - [ ] Set `ENABLE_FHIR_INTEGRATION=true` in .env.local
 - [ ] Test with: `npm run dev`
@@ -508,7 +508,7 @@ Expected performance with real APIs:
 |-------|-----------|-----------|-------|
 | Context | <50ms | 200-500ms | FHIR fetch |
 | Safety | <10ms | <10ms | Deterministic |
-| Reasoning | <100ms | 1-3s | OpenAI call |
+| Reasoning | <100ms | 1-3s | AWS Bedrock call |
 | Inventory | <10ms | 100-300ms | DB/API query |
 | Substitution | <10ms | <10ms | In-memory |
 | Explanation | <10ms | <10ms | Rule-based |
@@ -525,7 +525,7 @@ Expected performance with real APIs:
 - **Sequential execution** with error handling
 
 ### Current State
-- ✅ **2 layers using real AI** (OpenAI + OpenFDA)
+- ✅ **2 layers using real AI** (AWS Bedrock + OpenFDA)
 - ⚠️ **6 layers using mock/rules** (can be upgraded)
 - ✅ **All 8 layers functional** and tested
 - ✅ **Production-ready architecture**

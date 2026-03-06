@@ -1,10 +1,9 @@
 /**
  * Clinical Reasoning Agent - Layer 3
  * AI-driven prescription reasoning bounded by safety constraints
- * Uses GPT-4o-mini for cost-effective clinical suggestions
+ * Uses Amazon Bedrock (Claude 3.5 Sonnet) for clinical suggestions
  */
 
-import OpenAI from 'openai';
 import type {
     CompressedContext,
     CandidateTherapy,
@@ -12,15 +11,9 @@ import type {
     SafetyGuardResult
 } from '@/types/agents';
 import { preScreenDrug } from './safety-agent';
+import { BedrockAdapter } from './adapters/bedrock-adapter';
 
-// Lazy-initialized OpenAI client
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI | null {
-    if (!_openai && process.env.OPENAI_API_KEY) {
-        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-    return _openai;
-}
+const bedrockAdapter = new BedrockAdapter();
 
 // ============================================================
 // INDICATION MATCHING RULES (Deterministic base)
@@ -164,7 +157,7 @@ async function aiGenerateReasoning(
     indication: string,
     doctorNotes: string
 ): Promise<{ reasoning: string[]; guidelines: string[] }> {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
         return {
             reasoning: ['Rule-based recommendation'],
             guidelines: [],
@@ -172,46 +165,33 @@ async function aiGenerateReasoning(
     }
 
     try {
-        const openai = getOpenAI();
-        if (!openai) {
-            return { reasoning: ['Rule-based recommendation'], guidelines: [] };
-        }
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a clinical pharmacology advisor. Provide concise reasoning for drug selection.
-            
-            RULES:
-            1. Only provide 2-4 bullet points of reasoning
-            2. Reference relevant guidelines if applicable
-            3. Be specific about why alternatives were considered
-            4. Never recommend dosing - just explain drug choice
-            
-            Output JSON: { "reasoning": ["point1", "point2"], "guidelines": ["guideline1"] }`
-                },
-                {
-                    role: 'user',
-                    content: `Patient: ${context.demographics.age}${context.demographics.sex}, 
-            Conditions: ${context.active_conditions.map(c => c.display).join(', ')}
-            Allergies: ${context.allergies.map(a => a.substance).join(', ')}
-            eGFR: ${context.organ_function.egfr || 'unknown'}
-            
-            Indication: ${indication}
-            Doctor notes: ${doctorNotes}
-            
-            Explain why target drug was chosen.`
-                }
-            ],
-            temperature: 0.3,
-            max_tokens: 300,
-        });
+        const prompt = `You are a clinical pharmacology advisor. Provide concise reasoning for drug selection.
+        
+        RULES:
+        1. Only provide 2-4 bullet points of reasoning
+        2. Reference relevant guidelines if applicable
+        3. Be specific about why alternatives were considered
+        4. Never recommend dosing - just explain drug choice
+        
+        Patient: ${context.demographics.age}${context.demographics.sex}, 
+        Conditions: ${context.active_conditions.map(c => c.display).join(', ')}
+        Allergies: ${context.allergies.map(a => a.substance).join(', ')}
+        eGFR: ${context.organ_function.egfr || 'unknown'}
+        
+        Indication: ${indication}
+        Doctor notes: ${doctorNotes}
+        
+        Explain why target drug was chosen.
+        Output ONLY valid JSON: { "reasoning": ["point1", "point2"], "guidelines": ["guideline1"] }`;
 
-        const content = response.choices[0]?.message?.content || '{}';
-        return JSON.parse(content);
+        const responseText = await bedrockAdapter.invokeModel(prompt);
+
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+
+        return JSON.parse(jsonString);
     } catch (error) {
-        console.error('[Layer 3] AI reasoning failed:', error);
+        console.error('[Layer 3] AI reasoning failed via Bedrock:', error);
         return {
             reasoning: ['Based on clinical guidelines and patient factors'],
             guidelines: [],
@@ -319,7 +299,7 @@ export async function generateCandidateTherapies(
             .filter(r => r.includes('adjusted') || r.includes('reduced'))
             .map(adj => ({ reason: 'Clinical', adjustment: adj })) || [],
         generated_at: new Date().toISOString(),
-        model_version: process.env.OPENAI_API_KEY ? 'gpt-4o-mini' : 'rule-based-v2',
+        model_version: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? 'claude-3.5-sonnet' : 'rule-based-v2',
     };
 
     console.log(`[Layer 3] Generated ${candidates.length} candidates, ${contraindicatedDrugs.length} contraindicated`);
@@ -332,7 +312,7 @@ export async function generateCandidateTherapies(
 // ============================================================
 
 export async function detectIndication(doctorNotes: string): Promise<string> {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
         // Rule-based fallback
         const notesLower = doctorNotes.toLowerCase();
         if (notesLower.includes('fever') && notesLower.includes('cough')) return 'bacterial_respiratory';
@@ -342,24 +322,14 @@ export async function detectIndication(doctorNotes: string): Promise<string> {
     }
 
     try {
-        const openai = getOpenAI();
-        if (!openai) return 'bacterial_respiratory';
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: `Classify the clinical indication from these notes.
-            Return ONLY one of: bacterial_respiratory, uti, hypertension, diabetes_type2, pain_mild, pain_moderate, gerd, fever
-            Return just the indication code, nothing else.`
-                },
-                { role: 'user', content: doctorNotes }
-            ],
-            temperature: 0,
-            max_tokens: 50,
-        });
+        const prompt = `Classify the clinical indication from these notes.
+        Return ONLY one of: bacterial_respiratory, uti, hypertension, diabetes_type2, pain_mild, pain_moderate, gerd, fever
+        Return just the indication code, nothing else. Do not use quotes or backticks.
+        
+        Notes: ${doctorNotes}`;
 
-        return response.choices[0]?.message?.content?.trim() || 'bacterial_respiratory';
+        const responseText = await bedrockAdapter.invokeModel(prompt);
+        return responseText.replace(/['"]/g, '').trim() || 'bacterial_respiratory';
     } catch {
         return 'bacterial_respiratory';
     }

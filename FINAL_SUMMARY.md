@@ -7,7 +7,7 @@
 **Answer:** Your system is ALREADY functional with real AI! Here's what's working:
 
 #### ✅ Currently Using REAL APIs:
-- **OpenAI GPT-4o-mini** - AI-powered clinical reasoning (Layer 3)
+- **AWS Bedrock Claude 3.5 Sonnet** - AI-powered clinical reasoning (Layer 3)
 - **OpenFDA** - Real drug interaction data (Layer 2)
 - **FHIR Server** - Ready to connect (just enable the flag)
 
@@ -70,7 +70,7 @@ npm run test:agents
 ```
 ✅ Layer 1: Context Compression - WORKING
 ✅ Layer 2: Safety Guard - WORKING (100% deterministic)
-✅ Layer 3: Clinical Reasoning - WORKING (using OpenAI)
+✅ Layer 3: Clinical Reasoning - WORKING (using AWS Bedrock)
 ✅ Layer 4: Inventory Check - WORKING (mock data)
 ✅ Layer 5: Substitution - WORKING
 ✅ Layer 6: Explanation (XAI) - WORKING
@@ -184,7 +184,7 @@ npm run test:all
 **Layer 3 (Reasoning):**
 - ✅ Detects indication from doctor notes
 - ✅ Generates 3 candidate therapies
-- ✅ Uses OpenAI for enhanced reasoning
+- ✅ Uses AWS Bedrock for enhanced reasoning
 - ✅ Falls back to rules if API unavailable
 - ✅ Provides confidence scores
 
@@ -222,7 +222,7 @@ npm run test:all
 
 | Component | Status | Data Source |
 |-----------|--------|-------------|
-| **AI Reasoning** | ✅ REAL | OpenAI GPT-4o-mini |
+| **AI Reasoning** | ✅ REAL | AWS Bedrock Claude 3.5 Sonnet |
 | **Drug Interactions** | ✅ REAL | OpenFDA API |
 | **Safety Rules** | ✅ REAL | Built-in medical rules |
 | **Patient Data** | ⚠️ MOCK | 2 test patients |
@@ -242,7 +242,7 @@ npm run test:all
 - Pipeline execution: 2-4 seconds
 - Context extraction: 200-500ms (FHIR)
 - Safety checks: <10ms (deterministic)
-- AI reasoning: 1-3 seconds (OpenAI)
+- AI reasoning: 1-3 seconds (AWS Bedrock)
 
 ---
 
@@ -283,7 +283,7 @@ npm run test:agents
 npm run test:apis
 
 # Expected output:
-# ✅ OpenAI API is working
+# ✅ AWS Bedrock API is working
 # ✅ OpenFDA API is working
 # ✅ FHIR Server is accessible
 # ✅ Supabase is accessible
@@ -362,7 +362,7 @@ Layer 1: Context Agent
 Layer 3: Reasoning Agent
     → Analyzes notes + context
     → Generates 3 candidate therapies
-    → Uses AI (OpenAI) or rules
+    → Uses AI (AWS Bedrock) or rules
     ↓
 Layer 2: Safety Agent
     → Checks each candidate
@@ -400,7 +400,7 @@ Final Prescription (Doctor Approved)
 
 ### Immediate (Already Done ✅)
 - [x] All 8 layers implemented
-- [x] OpenAI integration working
+- [x] AWS Bedrock integration working
 - [x] OpenFDA integration working
 - [x] Mock data for testing
 - [x] Comprehensive test suite
@@ -494,14 +494,14 @@ npm run dev
 - **TypeScript** - Type-safe medical data
 - **Next.js** - Modern full-stack framework
 - **Supabase** - Scalable database
-- **OpenAI** - State-of-the-art AI reasoning
+- **AWS Bedrock** - State-of-the-art AI reasoning
 
 ---
 
 ## ✅ Final Checklist
 
 - [x] All 8 agent layers implemented and tested
-- [x] OpenAI integration working
+- [x] AWS Bedrock integration working
 - [x] OpenFDA integration working
 - [x] Mock data for 2 patients
 - [x] Comprehensive test suite

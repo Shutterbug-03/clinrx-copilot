@@ -31,7 +31,7 @@ Doctor-first, human-in-the-loop clinical decision support for prescription draft
                               ▲
 ┌─────────────────────────────────────────────────────────────┐
 │                  Clinical Reasoning (Layer 3)               │
-│                  GPT-4o-mini / Rule-based                   │
+│                  Claude 3.5 Sonnet / Rule-based                   │
 └─────────────────────────────────────────────────────────────┘
                               ▲
 ┌─────────────────────────────────────────────────────────────┐
@@ -77,7 +77,7 @@ cp .env.example .env.local
 **Minimum config (free):** No API keys required - uses mock data + rule-based reasoning
 
 **Enhanced features:**
-- `OPENAI_API_KEY` - GPT-4o-mini for clinical reasoning
+- `AWS_ACCESS_KEY_ID` - Claude 3.5 Sonnet for clinical reasoning
 - `OPENFDA_API_KEY` - Drug interaction data (120K req/day free)
 
 ---

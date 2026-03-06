@@ -173,14 +173,12 @@ export async function findEquivalents(
 // AI THERAPEUTIC SELECTION
 // ============================================================
 
-import OpenAI from 'openai';
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI | null {
-    if (!_openai && process.env.OPENAI_API_KEY) {
-        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-    return _openai;
-}
+// ============================================================
+// AI THERAPEUTIC SELECTION
+// ============================================================
+
+import { BedrockAdapter } from './adapters/bedrock-adapter';
+const bedrockAdapter = new BedrockAdapter();
 
 /**
  * AI-driven fallback to find therapeutic alternatives based on clinical rules
@@ -189,36 +187,30 @@ async function aiSuggestAlternatives(
     drugName: string,
     context: { allergies: string[]; riskFlags: string[] }
 ): Promise<DrugEquivalent[]> {
-    const openai = getOpenAI();
-    if (!openai) return [];
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+        return [];
+    }
 
     try {
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a clinical pharmacist. Suggest 2-3 therapeutic alternatives for a drug.
+        const prompt = `You are a clinical pharmacist. Suggest 2-3 therapeutic alternatives for a drug.
 Requirements:
 1. If patient has a beta-lactam/penicillin allergy, avoid ALL beta-lactams (penicillins, cephalosporins).
 2. Suggest alternatives from different drug classes that treat the same indication.
-3. Return ONLY a JSON array: [{ "drug": "Name", "type": "therapeutic_alternative", "note": "Reasoning..." }]`
-                },
-                {
-                    role: 'user',
-                    content: `Find safe alternatives for: ${drugName}
-Patient Allergies: ${context.allergies.join(', ')}
-Risk Flags: ${context.riskFlags.join(', ')}`
-                }
-            ],
-            response_format: { type: "json_object" }
-        });
+3. You must ONLY recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin, Pan-D) and provide realistic dosages available in the Indian market.
+4. Return ONLY a JSON array: [{ "drug": "Name", "type": "therapeutic_alternative", "note": "Reasoning..." }]
 
-        const content = response.choices[0]?.message?.content || '{ "alternatives": [] }';
+Find safe alternatives for: ${drugName}
+Patient Allergies: ${context.allergies.join(', ')}
+Risk Flags: ${context.riskFlags.join(', ')}`;
+
+        const responseText = await bedrockAdapter.invokeModel(prompt);
+
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        const content = jsonMatch ? jsonMatch[0] : responseText;
         const parsed = JSON.parse(content);
-        return parsed.alternatives || [];
+        return parsed || [];
     } catch (e) {
-        console.error('[Layer 5] AI Substitution failed:', e);
+        console.error('[Layer 5] AI Substitution failed via Bedrock:', e);
         return [];
     }
 }

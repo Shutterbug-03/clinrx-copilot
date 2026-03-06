@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { PrescriptionTemplate } from '@/components/PrescriptionTemplate';
+import { useAuth } from '@/components/AuthContext';
 import type { PatientSummary, PrescriptionDraft, PrescriptionMedication } from '@/types';
 
 interface HospitalSettings {

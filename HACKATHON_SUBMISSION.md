@@ -108,7 +108,7 @@ clinrx-mvp/
 #### ✅ Layer 3: Clinical Reasoning Agent
 - **Status:** FULLY FUNCTIONAL (Dual Mode)
 - **Features:**
-  - AI mode: Uses GPT-4o-mini for clinical reasoning
+  - AI mode: Uses Claude 3.5 Sonnet for clinical reasoning
   - Rule-based mode: Deterministic disease-drug mapping
   - Indication detection from doctor notes
   - Dose calculation with adjustments
@@ -195,7 +195,7 @@ npm run dev
 cp .env.example .env.local
 
 # Edit .env.local and add:
-OPENAI_API_KEY=sk-...           # For AI reasoning
+AWS_ACCESS_KEY_ID=sk-...           # For AI reasoning
 OPENFDA_API_KEY=...             # For drug interactions (optional)
 NEXT_PUBLIC_SUPABASE_URL=...    # For database (optional)
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
@@ -301,7 +301,7 @@ Expected Output:
 - ✅ Renal dosing rules (built-in)
 
 ### Real APIs (When Keys Provided)
-- 🔑 OpenAI GPT-4o-mini (clinical reasoning)
+- 🔑 AWS Bedrock Claude 3.5 Sonnet (clinical reasoning)
 - 🔑 OpenFDA (drug labels and interactions)
 - 🔑 Supabase (patient database)
 - 🔑 FHIR servers (patient data)
@@ -367,7 +367,7 @@ npm run start
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                  DATA SOURCES                               │
-│    Mock Data | OpenAI | OpenFDA | Supabase | FHIR          │
+│    Mock Data | AWS Bedrock | OpenFDA | Supabase | FHIR          │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -7,13 +7,15 @@
  * 4. Real drug data with Indian brands
  */
 
-import OpenAI from 'openai';
+
 import {
     DISEASE_DRUG_DATABASE,
     detectConditionsFromNotes,
     type ConditionMapping,
     type DrugInfo
 } from '@/data/disease-drug-database';
+import { BedrockAdapter } from './adapters/bedrock-adapter';
+
 import { inventoryConnector } from '@/lib/connectors/inventory-connector';
 import type {
     PrescriptionDraft,
@@ -27,14 +29,10 @@ import { openFDAClient } from '@/lib/connectors/openfda-client';
 import { medicalDataAggregator } from '@/lib/connectors/medical-aggregator';
 import { getBestAlternative } from './substitution-agent';
 
-// Lazy-initialized OpenAI client
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI | null {
-    if (!_openai && process.env.OPENAI_API_KEY) {
-        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-    return _openai;
-}
+// ============================================================
+// BEDROCK CLIENT SETUP
+// ============================================================
+const bedrockAdapter = new BedrockAdapter();
 
 // ============================================================
 // CHRONIC CONDITION MAPPING (for continuation drugs)
@@ -181,7 +179,7 @@ export async function generateMultiDrugPrescription(
     }
 
     // Step 5: AI-powered enhancement (if available)
-    if (process.env.OPENAI_API_KEY) {
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
         const aiEnhancements = await getAIEnhancements(
             patientSummary,
             doctorNotes,
@@ -263,54 +261,34 @@ async function aiSelectMedications(
     context: CompressedContext,
     doctorNotes: string
 ): Promise<AISuggestion[]> {
-    const openai = getOpenAI();
-    if (!openai) {
-        console.warn('[MultiDrug] No OpenAI key, falling back to empty suggestions');
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+        console.warn('[MultiDrug] Missing AWS Credentials, unable to call Bedrock. Returning empty suggestions.');
         return [];
     }
 
     try {
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a clinical decision support AI. 
-Suggest appropriate medications based on doctor notes and patient context.
-Rules:
-1. Return ONLY a JSON object with a "medications" array of objects.
-2. Account for allergies, age, and organ function (eGFR).
-3. Avoid interactions with current medications.
-4. Provide clinical reasoning for each choice.
-5. Use generic names primarily.
-
-Format: { "medications": [{ "drug": "Name", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`
-                },
-                {
-                    role: 'user',
-                    content: `
+        const patientSummaryStr = `
 Patient: ${patient.age}y ${patient.sex}, Weight: ${patient.key_vitals.weight}kg
 Conditions: ${patient.chronic_conditions.join(', ')}
 eGFR: ${patient.renal_status.egfr}
 Allergies: ${patient.allergies.join(', ')}
 Current Meds: ${patient.current_meds.map(m => `${m.drug} ${m.dose}`).join(', ')}
 Risk Flags: ${patient.risk_flags.join(', ')}
+`;
 
-Doctor's Clinical Notes: "${doctorNotes}"
+        const prompt = bedrockAdapter.formatPrompt(patientSummaryStr, doctorNotes) +
+            `\nYou must ONLY recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin, Pan-D) and provide realistic dosages available in the Indian market.\nFormat: { "medications": [{ "drug": "Name", "brand": "Optional", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`;
 
-Suggest correct medications:`
-                }
-            ],
-            temperature: 0.1,
-            max_tokens: 1000,
-            response_format: { type: "json_object" }
-        });
+        const responseText = await bedrockAdapter.invokeModel(prompt);
 
-        const content = response.choices[0]?.message?.content || '{ "medications": [] }';
-        const parsed = JSON.parse(content);
+        // Claude sometimes wraps JSON in markdown blocks
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+
+        const parsed = JSON.parse(jsonString);
         return parsed.medications || [];
     } catch (error) {
-        console.error('[MultiDrug] AI Selection failed:', error);
+        console.error('[MultiDrug] AI Selection via Bedrock failed:', error);
         return [];
     }
 }
@@ -473,26 +451,16 @@ async function getAIEnhancements(
     medications: PrescriptionMedication[],
     conditions: string[]
 ): Promise<{ additionalWarnings?: { type: string; message: string; drug?: string }[] }> {
-    const openai = getOpenAI();
-    if (!openai) return {};
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return {};
 
     try {
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a clinical pharmacist reviewing a prescription. Check for:
+        const prompt = `
+You are a clinical pharmacist reviewing a prescription. Check for:
 1. Drug-drug interactions between the medications
 2. Age-related dosing concerns
 3. Any critical warnings based on patient conditions
+You must ONLY recommend popular Indian pharmaceutical brand names and provide realistic dosages available in the Indian market.
 
-Return JSON: { "warnings": [{ "type": "interaction|age|condition", "message": "...", "drug": "..." }] }
-Return empty warnings array if no issues found.`
-                },
-                {
-                    role: 'user',
-                    content: `
 Patient: ${patient.age}${patient.sex}, ${patient.chronic_conditions.join(', ')}
 Allergies: ${patient.allergies.join(', ')}
 eGFR: ${patient.renal_status.egfr}
@@ -501,18 +469,20 @@ Current meds: ${patient.current_meds.map(m => m.drug).join(', ')}
 New prescription:
 ${medications.map(m => `- ${m.drug} ${m.dose} ${m.frequency}`).join('\n')}
 
-Check for interactions and warnings.`
-                }
-            ],
-            temperature: 0.2,
-            max_tokens: 500
-        });
+Check for interactions and warnings.
+Return JSON: { "warnings": [{ "type": "interaction|age|condition", "message": "...", "drug": "..." }] }
+Return empty warnings array if no issues found.
+`;
 
-        const content = response.choices[0]?.message?.content || '{}';
-        const parsed = JSON.parse(content.replace(/```json\n?/g, '').replace(/```/g, ''));
+        const responseText = await bedrockAdapter.invokeModel(prompt);
+
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+
+        const parsed = JSON.parse(jsonString);
         return { additionalWarnings: parsed.warnings || [] };
     } catch (error) {
-        console.error('[MultiDrug] AI enhancement failed:', error);
+        console.error('[MultiDrug] AI enhancement via Bedrock failed:', error);
         return {};
     }
 }

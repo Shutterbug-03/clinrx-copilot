@@ -1,21 +1,14 @@
 /**
  * Context Compression Agent - Layer 1
- * Uses Google ADK with OpenAI GPT-4o-mini for context extraction
+ * Uses Google ADK with Amazon Bedrock (Claude 3.5 Sonnet) for context extraction
  * Pure extraction - no hallucination allowed
  */
 
-import OpenAI from 'openai';
 import { fhirConnector } from '@/lib/connectors/fhir-connector';
 import type { RawPatientData, CompressedContext } from '@/types/agents';
+import { BedrockAdapter } from './adapters/bedrock-adapter';
 
-// Lazy-initialized OpenAI client (only created when API key is present)
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI | null {
-    if (!_openai && process.env.OPENAI_API_KEY) {
-        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-    return _openai;
-}
+const bedrockAdapter = new BedrockAdapter();
 
 // ============================================================
 // SUB-AGENT: HISTORY EXTRACTOR
@@ -253,8 +246,8 @@ export async function aiEnhancedExtraction(
     rawText: string,
     type: 'conditions' | 'medications' | 'allergies'
 ): Promise<string[]> {
-    if (!process.env.OPENAI_API_KEY) {
-        console.warn('[Layer 1] No OpenAI key, skipping AI extraction');
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+        console.warn('[Layer 1] No AWS credentials, skipping AI extraction');
         return [];
     }
 
@@ -272,23 +265,20 @@ export async function aiEnhancedExtraction(
     };
 
     try {
-        const openai = getOpenAI();
-        if (!openai) return [];
+        const prompt = `${prompts[type]}
+        
+        Clinical Text: ${rawText}
+        
+        Output ONLY a JSON array.`;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: prompts[type] },
-                { role: 'user', content: rawText },
-            ],
-            temperature: 0, // Deterministic
-            max_tokens: 500,
-        });
+        const responseText = await bedrockAdapter.invokeModel(prompt);
 
-        const content = response.choices[0]?.message?.content || '[]';
-        return JSON.parse(content);
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+
+        return JSON.parse(jsonString);
     } catch (error) {
-        console.error('[Layer 1] AI extraction failed:', error);
+        console.error('[Layer 1] AI extraction failed via Bedrock:', error);
         return [];
     }
 }

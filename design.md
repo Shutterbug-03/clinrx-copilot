@@ -170,8 +170,8 @@ enum SafetyDecision {
 **Purpose:** Generate evidence-based medication recommendations
 
 **Modes:**
-1. **AI-Powered Mode** (with OpenAI API key)
-   - Uses GPT-4o-mini for clinical reasoning
+1. **AI-Powered Mode** (with AWS credentials)
+   - Uses Claude 3.5 Sonnet for clinical reasoning
    - Analyzes doctor notes + patient context
    - Generates recommendations with rationale
 
@@ -850,7 +850,7 @@ CREATE TABLE drug_inventory (
 - Row-level security
 - Easy scaling
 
-### OpenAI GPT-4o-mini
+### AWS Bedrock Claude 3.5 Sonnet
 - Cost-effective for clinical reasoning
 - Fast response times
 - Good medical knowledge

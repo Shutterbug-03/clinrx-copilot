@@ -53,7 +53,7 @@ ClinRx Copilot provides an AI-powered, doctor-first prescription drafting system
 ### FR3: Clinical Reasoning Engine
 - **FR3.1:** Analyze doctor's clinical notes and patient context
 - **FR3.2:** Generate evidence-based medication recommendations
-- **FR3.3:** Support both AI-powered (GPT-4o-mini) and rule-based reasoning
+- **FR3.3:** Support both AI-powered (Claude 3.5 Sonnet) and rule-based reasoning
 - **FR3.4:** Provide multiple treatment options when applicable
 - **FR3.5:** Consider patient-specific factors (age, weight, comorbidities)
 
@@ -161,7 +161,7 @@ ClinRx Copilot provides an AI-powered, doctor-first prescription drafting system
 ### TR1: Technology Stack
 - **Frontend:** Next.js 16, React 19, TypeScript 5, Tailwind CSS 4
 - **Backend:** Next.js API Routes, Node.js 20+
-- **AI/ML:** OpenAI GPT-4o-mini, LangChain, Google ADK
+- **AI/ML:** AWS Bedrock Claude 3.5 Sonnet, LangChain, Google ADK
 - **Database:** Supabase (PostgreSQL)
 - **External APIs:** FHIR, OpenFDA, Inventory Management Systems
 

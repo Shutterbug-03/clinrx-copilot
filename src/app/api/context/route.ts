@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getMockCompressedContext } from '@/agents';
-import { supabase, isDbConnected } from '@/lib/supabase';
+import { db } from '@/lib/database-adapter';
 import type { CompressedContext } from '@/types/agents';
 
 // Request validation schema
@@ -55,19 +55,11 @@ export async function POST(request: NextRequest) {
         let summary: any = null;
         let compressedContext: any = null;
 
-        // 1. Try to fetch from Supabase first
-        if (isDbConnected && supabase) {
-            const { data, error } = await supabase
-                .from('patients')
-                .select('summary')
-                .eq('fhir_id', patient_id)
-                .single();
-
-            if (!error && data) {
-                summary = data.summary;
-                // For compressed_context, we can map it back or just use a mock if it doesn't exist separately
-                compressedContext = summary; // Approximation
-            }
+        // 1. Try to fetch from Database Adapter (DynamoDB → Supabase → Mock)
+        const dbPatient = await db.getPatient(patient_id);
+        if (dbPatient) {
+            summary = dbPatient;
+            compressedContext = dbPatient; // Approximation
         }
 
         // 2. Fallback to Layer 1 Agent (FHIR or Mock)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { runPrescriptionPipeline } from '@/agents';
 import { generatePrescriptionDraft } from '@/agents/prescription-generator';
-import { supabase, isDbConnected } from '@/lib/supabase';
+import { db } from '@/lib/database-adapter';
 import type { PatientSummary } from '@/types';
 
 // Request validation
@@ -30,60 +30,8 @@ export async function POST(request: NextRequest) {
         console.log(`[API] Prescription request for patient: ${patient_id}`);
         console.log(`[API] Using multi-drug mode: ${use_multi_drug}`);
 
-        let patient: PatientSummary | null = null;
-
-        if (isDbConnected && supabase) {
-            const { data, error } = await supabase
-                .from('patients')
-                .select('summary')
-                .eq('fhir_id', patient_id)
-                .single();
-
-            if (!error && data) {
-                patient = data.summary as PatientSummary;
-            }
-        }
-
-        // Fallback for tests if db isn't connected or empty
-        if (!patient) {
-            console.warn(`[API] Could not fetch patient ${patient_id} from DB, checking mock...`);
-            if (patient_id === 'PT001') {
-                patient = {
-                    patient_id: 'PT001',
-                    name: 'Rajesh Kumar',
-                    age: 62,
-                    sex: 'M',
-                    chronic_conditions: ['Type 2 Diabetes', 'Hypertension', 'CKD Stage 3a'],
-                    renal_status: { egfr: 48, ckd_stage: '3a' },
-                    allergies: ['Penicillin', 'Sulfa drugs'],
-                    current_meds: [
-                        { drug: 'Metformin', dose: '500mg', frequency: 'BD' },
-                        { drug: 'Losartan', dose: '50mg', frequency: 'OD' },
-                        { drug: 'Amlodipine', dose: '5mg', frequency: 'OD' },
-                    ],
-                    prior_failures: [{ drug: 'Metformin', year: 2019, reason: 'GI intolerance at 1000mg' }],
-                    key_vitals: { bp: '142/88', weight: 78 },
-                    risk_flags: ['renal_dose_adjust', 'beta_lactam_allergy', 'elderly_patient', 'polypharmacy'],
-                };
-            } else if (patient_id === 'PT002') {
-                patient = {
-                    patient_id: 'PT002',
-                    name: 'Priya Sharma',
-                    age: 45,
-                    sex: 'F',
-                    chronic_conditions: ['Asthma', 'Hypothyroidism'],
-                    renal_status: { egfr: 92 },
-                    allergies: [],
-                    current_meds: [
-                        { drug: 'Levothyroxine', dose: '75mcg', frequency: 'OD' },
-                        { drug: 'Salbutamol MDI', dose: '2 puffs', frequency: 'PRN' },
-                    ],
-                    prior_failures: [],
-                    key_vitals: { bp: '118/76', weight: 62 },
-                    risk_flags: [],
-                };
-            }
-        }
+        // Use database adapter (DynamoDB → Supabase → Mock Data)
+        const patient = await db.getPatient(patient_id);
 
         if (!patient) {
             return NextResponse.json(
