@@ -42,7 +42,7 @@ export class BedrockAdapter {
                 },
             ],
             inferenceConfig: {
-                maxTokens: 4096,
+                maxTokens: 2048,
                 temperature: 0.2,
             }
         });
