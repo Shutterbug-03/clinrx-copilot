@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
 
         const client = new BedrockRuntimeClient({ region: process.env.AWS_REGION || "ap-south-1" });
 
+        // Add timeout to prevent 504 Gateway Timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+
         // Convert base64 data URI to raw bytes
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const imageBuffer = Buffer.from(base64Data, "base64");
@@ -74,13 +78,16 @@ Only return the JSON, no other text.`
 
         try {
             if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-                const response = await client.send(command);
+                const response = await client.send(command, { abortSignal: controller.signal as any });
+                clearTimeout(timeoutId);
                 content = response.output?.message?.content?.[0]?.text || '{}';
             } else {
                 throw new Error("AWS credentials missing, jumping to fallback");
             }
-        } catch (bedrockError) {
-            console.warn("[OCR API] Bedrock failed, attempting OpenAI fallback...", bedrockError);
+        } catch (bedrockError: any) {
+            clearTimeout(timeoutId);
+            const isTimeout = bedrockError.name === 'AbortError';
+            console.warn(`[OCR API] Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}, attempting OpenAI fallback...`, bedrockError.message);
             if (process.env.OPENAI_API_KEY) {
                 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
                 const fallbackResponse = await openai.chat.completions.create({

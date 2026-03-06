@@ -47,12 +47,19 @@ export class BedrockAdapter {
             accept: "application/json",
         });
 
+        // Create an AbortController to timeout the Bedrock request if it takes too long
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+
         try {
-            const response = await this.client.send(command);
+            const response = await this.client.send(command, { abortSignal: controller.signal as any });
+            clearTimeout(timeoutId);
             const responseBody = JSON.parse(new TextDecoder().decode(response.body));
             return responseBody.content[0].text;
-        } catch (error) {
-            console.warn("[BedrockAdapter] AWS Bedrock invocation failed:", (error as Error).message);
+        } catch (error: any) {
+            clearTimeout(timeoutId);
+            const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
+            console.warn(`[BedrockAdapter] AWS Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}:`, error.message);
 
             const openaiClient = this.getOpenAIClient();
             if (openaiClient) {
