@@ -1,19 +1,20 @@
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import OpenAI from "openai";
 
 /**
  * BedrockAdapter - Orchestrates clinical reasoning using Amazon Bedrock foundation models.
  * Incorporates an emergency fallback to OpenAI (GPT-4o-mini) if AWS Bedrock fails.
+ * Now optimized to use Llama 3 70B in us-east-1 to utilize AWS credits.
  */
 export class BedrockAdapter {
     private client: BedrockRuntimeClient;
     private modelId: string;
     private openai: OpenAI | null = null;
 
-    constructor(region: string = process.env.AWS_REGION || "ap-south-1") {
+    constructor(region: string = "us-east-1") {
         this.client = new BedrockRuntimeClient({ region });
-        // Using APAC Inference Profile for Claude 3.5 Sonnet in Mumbai (ap-south-1)
-        this.modelId = "apac.anthropic.claude-3-5-sonnet-20240620-v1:0";
+        // Switching to Llama 3 70B in us-east-1 as it is accessible via credits
+        this.modelId = "meta.llama3-70b-instruct-v1:0";
     }
 
     private getOpenAIClient(): OpenAI | null {
@@ -28,38 +29,38 @@ export class BedrockAdapter {
      * falling back to OpenAI if Bedrock faces an outage or throttling.
      */
     async invokeModel(prompt: string): Promise<string> {
-        const payload = {
-            anthropic_version: "bedrock-2023-05-31",
-            max_tokens: 4096,
-            messages: [
-                {
-                    role: "user",
-                    content: [{ type: "text", text: prompt }],
-                },
-            ],
-            temperature: 0.2, // Low temperature for deterministic clinical logic
-        };
-
-        const command = new InvokeModelCommand({
-            modelId: this.modelId,
-            body: JSON.stringify(payload),
-            contentType: "application/json",
-            accept: "application/json",
-        });
-
         // Create an AbortController to timeout the Bedrock request if it takes too long
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
+        const command = new ConverseCommand({
+            modelId: this.modelId,
+            messages: [
+                {
+                    role: "user",
+                    content: [{ text: prompt }],
+                },
+            ],
+            inferenceConfig: {
+                maxTokens: 4096,
+                temperature: 0.2,
+            }
+        });
+
         try {
             const response = await this.client.send(command, { abortSignal: controller.signal as any });
             clearTimeout(timeoutId);
-            const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-            return responseBody.content[0].text;
+
+            const message = response.output?.message;
+            if (!message || !message.content || message.content.length === 0) {
+                throw new Error("Empty response from Bedrock");
+            }
+
+            return message.content[0].text || "";
         } catch (error: any) {
             clearTimeout(timeoutId);
             const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
-            console.warn(`[BedrockAdapter] AWS Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}:`, error.message);
+            console.warn(`[BedrockAdapter] AWS Bedrock (Llama 3 70B) ${isTimeout ? 'TIMED OUT' : 'FAILED'}:`, error.message);
 
             const openaiClient = this.getOpenAIClient();
             if (openaiClient) {
