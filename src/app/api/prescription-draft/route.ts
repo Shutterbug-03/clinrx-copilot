@@ -5,6 +5,10 @@ import { generatePrescriptionDraft } from '@/agents/prescription-generator';
 import { db } from '@/lib/database-adapter';
 import type { PatientSummary } from '@/types';
 
+// Allow this API route to run for up to 60 seconds on AWS Lambda/Amplify
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 // Request validation
 const PrescriptionRequestSchema = z.object({
     patient_id: z.string().min(1),

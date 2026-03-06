@@ -4,6 +4,10 @@ import { getMockCompressedContext } from '@/agents';
 import { db } from '@/lib/database-adapter';
 import type { CompressedContext } from '@/types/agents';
 
+// Allow this API route to run for up to 60 seconds on AWS Lambda/Amplify
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 // Request validation schema
 const ContextRequestSchema = z.object({
     patient_id: z.string().min(1),

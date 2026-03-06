@@ -3,6 +3,10 @@ import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-r
 import OpenAI from "openai";
 import { storeOCRImage } from '@/lib/s3-storage';
 
+// Allow this API route to run for up to 60 seconds on AWS Lambda/Amplify
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
     try {
         const { image } = await request.json();
