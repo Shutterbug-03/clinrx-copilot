@@ -157,13 +157,6 @@ async function aiGenerateReasoning(
     indication: string,
     doctorNotes: string
 ): Promise<{ reasoning: string[]; guidelines: string[] }> {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-        return {
-            reasoning: ['Rule-based recommendation'],
-            guidelines: [],
-        };
-    }
-
     try {
         const prompt = `You are a clinical pharmacology advisor. Provide concise reasoning for drug selection.
         
@@ -299,7 +292,7 @@ export async function generateCandidateTherapies(
             .filter(r => r.includes('adjusted') || r.includes('reduced'))
             .map(adj => ({ reason: 'Clinical', adjustment: adj })) || [],
         generated_at: new Date().toISOString(),
-        model_version: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ? 'claude-3.5-sonnet' : 'rule-based-v2',
+        model_version: 'claude-3.5-sonnet',
     };
 
     console.log(`[Layer 3] Generated ${candidates.length} candidates, ${contraindicatedDrugs.length} contraindicated`);

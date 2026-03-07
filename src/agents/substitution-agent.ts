@@ -196,18 +196,14 @@ async function aiSuggestAlternatives(
     drugName: string,
     context: { allergies: string[]; riskFlags: string[] }
 ): Promise<DrugEquivalent[]> {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-        return [];
-    }
-
     try {
-        const prompt = `You are a clinical pharmacist. Suggest 2-3 therapeutic alternatives for a drug.
+        const prompt = `
+You are a clinical pharmacologist finding alternatives for ${drugName}.
 Requirements:
 1. If patient has a beta-lactam/penicillin allergy, avoid ALL beta-lactams (penicillins, cephalosporins).
 2. Suggest alternatives from different drug classes that treat the same indication.
 3. You must ONLY recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin, Pan-D) and provide realistic dosages available in the Indian market.
 4. Return ONLY a JSON array: [{ "drug": "Name", "type": "therapeutic_alternative", "note": "Reasoning..." }]
-
 Find safe alternatives for: ${drugName}
 Patient Allergies: ${context.allergies.join(', ')}
 Risk Flags: ${context.riskFlags.join(', ')}`;

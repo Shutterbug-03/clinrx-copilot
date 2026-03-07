@@ -246,10 +246,7 @@ export async function aiEnhancedExtraction(
     rawText: string,
     type: 'conditions' | 'medications' | 'allergies'
 ): Promise<string[]> {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-        console.warn('[Layer 1] No AWS credentials, skipping AI extraction');
-        return [];
-    }
+    // AWS explicit keys check removed to support IAM Roles in Amplify
 
     const prompts = {
         conditions: `Extract all medical conditions from this clinical text. 
