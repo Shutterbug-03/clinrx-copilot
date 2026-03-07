@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # ==============================================================================
-# RxAI - AWS SSM Secrets Setup Script
+# RxAI - AWS SSM Secrets Setup Script (Robust Version)
 # ==============================================================================
 # This script pushes critical environment variables from .env.local 
 # to AWS System Manager (SSM) Parameter Store for production use.
+# It uses temporary files to prevent AWS CLI from fetching URL-like strings.
 # ==============================================================================
 
-# 1. Load critical secrets (manually parsed to avoid dotenv requirement)
+# 1. Load critical secrets
 if [ -f .env.local ]; then
     export $(grep -v '^#' .env.local | xargs)
 else
@@ -32,19 +33,26 @@ push_secret() {
     fi
 
     echo "📡 Pushing $PREFIX/$name..."
+    
+    # Use a temporary file to prevent AWS CLI v2 from interpreting URLs as URIs to fetch
+    local tmp_file=$(mktemp)
+    echo -n "$value" > "$tmp_file"
+    
     aws ssm put-parameter \
         --name "$PREFIX/$name" \
-        --value "$value" \
+        --value "file://$tmp_file" \
         --type "$type" \
         --overwrite \
         --region "$REGION"
+        
+    rm "$tmp_file"
 }
 
 # AI / LLM
 push_secret "OPENAI_API_KEY" "$OPENAI_API_KEY"
 
 # Supabase (Fallback)
-push_secret "SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
+push_secret "SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL" "String"
 push_secret "SUPABASE_KEY" "$SUPABASE_SERVICE_KEY"
 push_secret "NEXT_PUBLIC_SUPABASE_ANON_KEY" "$NEXT_PUBLIC_SUPABASE_ANON_KEY" "String"
 
