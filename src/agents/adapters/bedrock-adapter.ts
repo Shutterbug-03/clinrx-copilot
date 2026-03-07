@@ -2,9 +2,9 @@ import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-r
 import OpenAI from "openai";
 
 /**
- * BedrockAdapter - Orchestrates clinical reasoning using Amazon Bedrock foundation models.
- * Incorporates an emergency fallback to OpenAI (GPT-4o-mini) if AWS Bedrock fails.
- * Now optimized to use Llama 3 70B in us-east-1 to utilize AWS credits.
+ * BedrockAdapter - Orchestrates clinical reasoning.
+ * Now prioritized to use OpenAI (GPT-4o-mini) natively,
+ * with an emergency fallback to Amazon Bedrock (Llama 3 70B) if OpenAI fails.
  */
 export class BedrockAdapter {
     private client: BedrockRuntimeClient;
@@ -25,11 +25,46 @@ export class BedrockAdapter {
     }
 
     /**
-     * Generates a clinical completion based on a structured prompt using AWS Bedrock, 
-     * falling back to OpenAI if Bedrock faces an outage or throttling.
+     * Generates a clinical completion based on a structured prompt using OpenAI, 
+     * falling back to AWS Bedrock if OpenAI faces an outage or throttling.
      */
     async invokeModel(prompt: string): Promise<string> {
-        // Create an AbortController to timeout the Bedrock request if it takes too long
+        const openaiClient = this.getOpenAIClient();
+
+        if (openaiClient) {
+            console.log("[BedrockAdapter] 🚀 Using OpenAI (gpt-4o-mini) as Primary Engine...");
+            try {
+                // OpenAI request with a manual abort controller timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                const response = await Promise.race([
+                    openaiClient.chat.completions.create({
+                        model: 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.2,
+                    }),
+                    new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000))
+                ]);
+
+                clearTimeout(timeoutId);
+
+                if (!response) {
+                    throw new Error("OpenAI API timed out after 15s");
+                }
+
+                return response.choices[0]?.message?.content || '{}';
+            } catch (error: any) {
+                console.warn(`[BedrockAdapter] OpenAI API FAILED or TIMED OUT:`, error.message);
+                // Continue to Bedrock fallback
+            }
+        } else {
+            console.warn("[BedrockAdapter] OPENAI_API_KEY missing. Proceeding directly to Bedrock fallback.");
+        }
+
+        // --- FALLBACK: AWS BEDROCK ---
+        console.log("[BedrockAdapter] 🔄 Falling back to AWS Bedrock (Llama 3 70B)...");
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
@@ -60,25 +95,8 @@ export class BedrockAdapter {
         } catch (error: any) {
             clearTimeout(timeoutId);
             const isTimeout = error.name === 'AbortError' || error.message?.includes('abort');
-            console.warn(`[BedrockAdapter] AWS Bedrock (Llama 3 70B) ${isTimeout ? 'TIMED OUT' : 'FAILED'}:`, error.message);
-
-            const openaiClient = this.getOpenAIClient();
-            if (openaiClient) {
-                console.log("[BedrockAdapter] 🔄 Falling back to OpenAI (gpt-4o-mini)...");
-                try {
-                    const fallbackResponse = await openaiClient.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [{ role: 'user', content: prompt }],
-                        temperature: 0.2,
-                    });
-                    return fallbackResponse.choices[0]?.message?.content || '{}';
-                } catch (fallbackError) {
-                    console.error("[BedrockAdapter] OpenAI fallback also failed:", fallbackError);
-                    throw new Error("Critical Failure: Both Bedrock and OpenAI fallback engines failed.");
-                }
-            }
-
-            throw new Error("Bedrock reasoning failed and no OpenAI fallback available. Check AWS credentials and OPENAI_API_KEY.");
+            console.error(`[BedrockAdapter] Bedrock fallback ${isTimeout ? 'TIMED OUT' : 'FAILED'}:`, error.message);
+            throw new Error("Critical Failure: Both OpenAI and Bedrock fallback engines failed.");
         }
     }
 

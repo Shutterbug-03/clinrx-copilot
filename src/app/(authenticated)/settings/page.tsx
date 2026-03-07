@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/components/AuthContext';
 
 interface HospitalSettings {
     name: string;
@@ -21,6 +22,7 @@ interface DoctorProfile {
 const inputStyle = { color: '#000000' };
 
 export default function SettingsPage() {
+    const { logout } = useAuth();
     const [hospital, setHospital] = useState<HospitalSettings>({
         name: 'City Medical Center',
         address: '123 Healthcare Avenue, Mumbai - 400001',
@@ -64,12 +66,20 @@ export default function SettingsPage() {
                         </Link>
                         <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
                     </div>
-                    <button
-                        onClick={saveSettings}
-                        className="px-5 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600 transition-colors"
-                    >
-                        {saved ? '✓ Saved' : 'Save Settings'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={logout}
+                            className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                            Logout
+                        </button>
+                        <button
+                            onClick={saveSettings}
+                            className="px-5 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600 transition-colors"
+                        >
+                            {saved ? '✓ Saved' : 'Save Settings'}
+                        </button>
+                    </div>
                 </div>
             </header>
 

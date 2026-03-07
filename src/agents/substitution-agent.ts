@@ -212,14 +212,28 @@ Find safe alternatives for: ${drugName}
 Patient Allergies: ${context.allergies.join(', ')}
 Risk Flags: ${context.riskFlags.join(', ')}`;
 
-        const responseText = await bedrockAdapter.invokeModel(prompt);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s inner breaker
 
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        const content = jsonMatch ? jsonMatch[0] : responseText;
-        const parsed = JSON.parse(content);
-        return parsed || [];
+        try {
+            const responseText = await Promise.race([
+                bedrockAdapter.invokeModel(prompt),
+                new Promise<string>((_, reject) => {
+                    setTimeout(() => reject(new Error('AI Substitution Timeout')), 6000);
+                })
+            ]);
+            clearTimeout(timeoutId);
+
+            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            const content = jsonMatch ? jsonMatch[0] : responseText;
+            const parsed = JSON.parse(content);
+            return parsed || [];
+        } catch (e) {
+            console.warn('[Layer 5] AI Substitution inner timeout or failure. Yielding empty alts.');
+            return [];
+        }
     } catch (e) {
-        console.error('[Layer 5] AI Substitution failed via Bedrock:', e);
+        console.error('[Layer 5] Fatal generic error in AI Substitution:', e);
         return [];
     }
 }
@@ -263,13 +277,17 @@ export async function getBestAlternative(
     }
 
     // 4. Cross-reference with inventory (Parallelized)
-    await Promise.all(results.map(async (res) => {
-        const inv = await inventoryConnector.isAvailable(res.drug);
-        res.available = inv.available;
-    }));
+    const availabilityResults = await Promise.all(results.map(res => inventoryConnector.isAvailable(res.drug)));
+
+    results.forEach((res, index) => {
+        res.available = availabilityResults[index].available;
+    });
+
+    // 5. Deduplicate by drug name
+    const uniqueResults = Array.from(new Map(results.map(item => [item.drug.toLowerCase(), item])).values());
 
     // Sort: Available first, then therapeutic vs salt priority
-    return results.sort((a, b) => {
+    return uniqueResults.sort((a, b) => {
         if (a.available && !b.available) return -1;
         if (!a.available && b.available) return 1;
         return (b.confidence || 0.5) - (a.confidence || 0.5);

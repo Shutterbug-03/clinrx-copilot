@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
+import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract";
 import OpenAI from "openai";
 import { storeOCRImage } from '@/lib/s3-storage';
 
@@ -39,106 +40,85 @@ export async function POST(request: NextRequest) {
         const formatMatch = image.match(/^data:image\/(\w+);base64,/);
         const format = formatMatch ? formatMatch[1] : "jpeg";
 
-        const modelId = "apac.anthropic.claude-3-5-sonnet-20240620-v1:0";
+        // STEP 1: AWS Textract
+        let rawText = "";
+        try {
+            console.log(`[OCR_API] Triggering AWS Textract (Size: ${imageBuffer.length} bytes)`);
+            const textractClient = new TextractClient({ region: process.env.AWS_REGION || "ap-south-1" });
+            const extractCmd = new DetectDocumentTextCommand({
+                Document: { Bytes: imageBuffer }
+            });
+            const textractResponse = await textractClient.send(extractCmd);
 
-        const command = new ConverseCommand({
-            modelId,
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        {
-                            text: `You are a medical prescription OCR assistant. Analyze this prescription image and extract:
-1. Patient name (if visible)
-2. List of medications with doses and frequencies
+            const lines = textractResponse.Blocks?.filter(b => b.BlockType === 'LINE').map(b => b.Text) || [];
+            rawText = lines.join("\n");
+            console.log(`[OCR_API] Textract Extracted ${lines.length} lines of text.`);
+        } catch (error: any) {
+            console.warn(`[OCR_API] Textract FAILED, proceeding with empty text (Vision will be used):`, error.message);
+        }
 
-Return as JSON:
-{
-  "patientName": "name or null",
-  "medications": ["Drug1 dose frequency", "Drug2 dose frequency"]
-}
-
-Only return the JSON, no other text.`
-                        },
-                        {
-                            image: {
-                                format: format as 'jpeg' | 'png' | 'gif' | 'webp',
-                                source: {
-                                    bytes: imageBuffer
-                                }
-                            }
-                        }
-                    ]
-                }
-            ],
-            inferenceConfig: { maxTokens: 500 }
-        });
-
+        // STEP 2: OpenAI GPT-4o-mini Parsing
         let content = '{}';
 
-        const ocrStart = Date.now();
-        try {
-            if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-                console.log(`[OCR_API] Triggering Bedrock OCR (Size: ${imageBuffer.length} bytes)`);
-                const response = await client.send(command, { abortSignal: controller.signal as any });
-                clearTimeout(timeoutId);
-                content = response.output?.message?.content?.[0]?.text || '{}';
-                console.log(`[OCR_API] Bedrock finished in ${Date.now() - ocrStart}ms`);
-            } else {
-                throw new Error("AWS credentials missing, jumping to fallback");
-            }
-        } catch (bedrockError: any) {
-            clearTimeout(timeoutId);
-            const isTimeout = bedrockError.name === 'AbortError';
-            console.warn(`[OCR_API] Bedrock ${isTimeout ? 'TIMED OUT' : 'FAILED'}, attempting OpenAI fallback...`, bedrockError.message);
-            if (process.env.OPENAI_API_KEY) {
-                console.log("[OCR_API] Triggering OpenAI Vision fallback...");
-                const fallbackStart = Date.now();
-                const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-                const fallbackResponse = await openai.chat.completions.create({
-                    model: 'gpt-4o-mini',
-                    messages: [
+        console.log("[OCR_API] Triggering OpenAI GPT-4o-mini combined with Textract data...");
+        const fallbackStart = Date.now();
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const fallbackResponse = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'user',
+                    content: [
                         {
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: `You are a medical prescription OCR assistant. Analyze this prescription image and extract:
-1. Patient name (if visible)
-2. List of medications with doses and frequencies
+                            type: 'text',
+                            text: `You are a medical prescription data extractor. 
+Analyze the image AND the raw OCR text to extract patient details.
 
-Return as JSON:
+RAW OCR TEXT FROM TEXTRACT:
+"""
+${rawText}
+"""
+
+Extract the following into a valid JSON object:
+1. "name": Patient full name
+2. "age": Patient age (number only, as string) OR "sex": 'M' | 'F' | 'Other'
+3. "phone": Phone number
+4. "allergies": Comma-separated allergies
+5. "conditions": Comma-separated chronic conditions or diagnoses
+6. "currentMeds": List of medications with doses and frequencies, one per line. Use "\n" for line breaks.
+
+Return ONLY the JSON matching this interface:
 {
-  "patientName": "name or null",
-  "medications": ["Drug1 dose frequency", "Drug2 dose frequency"]
-}
-
-Only return the JSON, no other text.`,
-                                },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: image,
-                                    },
-                                },
-                            ],
+  "name": "",
+  "age": "",
+  "sex": "M",
+  "phone": "",
+  "allergies": "",
+  "conditions": "",
+  "currentMeds": ""
+}`,
+                        },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: image,
+                            },
                         },
                     ],
-                    max_tokens: 500,
-                });
-                content = fallbackResponse.choices[0]?.message?.content || '{}';
-                console.log(`[OCR_API] OpenAI fallback finished in ${Date.now() - fallbackStart}ms`);
-            } else {
-                throw new Error("Both Bedrock and OpenAI OCR failed.");
-            }
-        }
+                },
+            ],
+            response_format: { type: "json_object" },
+            max_tokens: 1000,
+        });
+        content = fallbackResponse.choices[0]?.message?.content || '{}';
+        console.log(`[OCR_API] OpenAI finished in ${Date.now() - fallbackStart}ms`);
 
         // Parse the JSON response
         try {
             const parsed = JSON.parse(content);
 
             // 🟢 Store image in S3 for audit trail (non-blocking)
-            storeOCRImage(parsed.patientName || 'unknown', imageBuffer, format).catch(() => { });
+            storeOCRImage(parsed.name || 'unknown', imageBuffer, format).catch(() => { });
 
             return NextResponse.json(parsed);
         } catch {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthenticationDetails, CognitoUser } from 'amazon-cognito-identity-js';
 import { userPool } from '@/lib/cognito';
 import { useAuth } from '@/components/AuthContext';
@@ -14,8 +14,14 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [needsNewPassword, setNeedsNewPassword] = useState(false);
     const [cognitoUser, setCognitoUser] = useState<CognitoUser | null>(null);
-    const { setUser } = useAuth();
+    const { setUser, user, isLoading: authLoading } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && user) {
+            router.push('/dashboard');
+        }
+    }, [user, authLoading, router]);
 
     const fetchDoctorProfile = async (userEmail: string) => {
         try {

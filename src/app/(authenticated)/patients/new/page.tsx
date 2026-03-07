@@ -50,16 +50,17 @@ export default function NewPatientPage() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    // Auto-fill medications from OCR
-                    if (data.medications) {
-                        setPatient(prev => ({
-                            ...prev,
-                            currentMeds: data.medications.join('\n'),
-                        }));
-                    }
-                    if (data.patientName) {
-                        setPatient(prev => ({ ...prev, name: data.patientName }));
-                    }
+                    // Auto-fill all fields from OCR
+                    setPatient(prev => ({
+                        ...prev,
+                        name: data.name || prev.name,
+                        age: data.age ? String(data.age) : prev.age,
+                        sex: data.sex === 'M' || data.sex === 'F' || data.sex === 'Other' ? data.sex : prev.sex,
+                        phone: data.phone || prev.phone,
+                        allergies: data.allergies || prev.allergies,
+                        conditions: data.conditions || prev.conditions,
+                        currentMeds: data.currentMeds || prev.currentMeds,
+                    }));
                 }
             } catch (error) {
                 console.error('OCR failed:', error);
@@ -263,8 +264,9 @@ export default function NewPatientPage() {
                             <h3 className="text-sm font-medium text-slate-700 mb-2">How OCR Works</h3>
                             <ul className="text-xs text-slate-500 space-y-1">
                                 <li>• Upload a photo of previous prescription</li>
-                                <li>• GPT-4o Vision extracts medicine names</li>
-                                <li>• Auto-fills the medications field</li>
+                                <li>• AWS Textract powers raw text extraction</li>
+                                <li>• GPT-4o-mini extracts demographics & clinical data</li>
+                                <li>• Auto-fills all relevant patient fields</li>
                                 <li>• Review and edit before saving</li>
                             </ul>
                         </div>

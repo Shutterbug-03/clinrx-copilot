@@ -279,7 +279,9 @@ Risk Flags: ${patient.risk_flags.join(', ')}
 `;
 
         const prompt = bedrockAdapter.formatPrompt(patientSummaryStr, doctorNotes) +
-            `\nYou must ONLY recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin, Pan-D) and provide realistic dosages available in the Indian market.\nFormat: { "medications": [{ "drug": "Name", "brand": "Optional", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`;
+            `\nCRITICAL INSTRUCTION: You MUST explicitly include the specific medications requested by name in the DOCTOR NOTES in your output array. Do not ignore them or substitute them yourself. ` +
+            `\nIf the doctor gives a specific brand (e.g., "Rybelsus", "Vimovo", "Corex"), include that exact name as the "drug" or "brand" so downstream inventory checks can process it.` +
+            `\nIf no specific drugs are requested, recommend popular Indian pharmaceutical brand names (e.g., Dolo, Augmentin) with realistic dosages.\nFormat: { "medications": [{ "drug": "Name", "brand": "Optional", "dose": "...", "frequency": "...", "duration": "...", "route": "...", "indication": "...", "reasoning": "..." }] }`;
 
         console.log('[MultiDrug] Calling AI Engine (Bedrock w/ Fallback)...');
         const responseText = await bedrockAdapter.invokeModel(prompt);

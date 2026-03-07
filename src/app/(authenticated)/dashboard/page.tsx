@@ -89,7 +89,7 @@ function PatientCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-900 truncate">{patient.name}</p>
-          <p className="text-sm text-slate-500">{patient.age} yrs • {patient.sex === 'M' ? 'Male' : 'Female'}{patient.phone ? ` • ${patient.phone}` : ''}</p>
+          <p className="text-sm text-slate-500">{patient.age} yrs • {patient.sex === 'M' ? 'Male' : 'Female'}</p>
         </div>
         {selected && (
           <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center">
@@ -143,8 +143,8 @@ function MedicationCard({
               </span>
               {med.in_stock !== undefined && (
                 <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${med.in_stock
-                    ? 'text-teal-600 bg-teal-50 border-teal-100/50'
-                    : 'text-rose-500 bg-rose-50 border-rose-100/50'
+                  ? 'text-teal-600 bg-teal-50 border-teal-100/50'
+                  : 'text-rose-500 bg-rose-50 border-rose-100/50'
                   }`}>
                   {med.in_stock ? 'In Stock' : 'Out of Stock'}
                 </span>
@@ -343,10 +343,12 @@ interface DesktopLayoutProps {
   generateDraft: () => void;
   toggleMedicationSelection: (id: string) => void;
   setEditingMed: (med: SelectableMedication) => void;
+  addNewMedication: () => void;
   toggleAlternatives: (id: string) => void;
   approve: () => void;
   hospital: HospitalSettings | null;
   doctor: DoctorProfile | null;
+  logout: () => void;
 }
 
 interface MobileLayoutProps {
@@ -366,15 +368,15 @@ interface MobileLayoutProps {
   generateDraft: () => void;
   toggleMedicationSelection: (id: string) => void;
   setEditingMed: (med: SelectableMedication) => void;
+  addNewMedication: () => void;
   toggleAlternatives: (id: string) => void;
   approve: () => void;
   setMobileStep: (step: number | ((prev: number) => number)) => void;
+  logout: () => void;
 }
 
 // ... skipped down to DesktopLayout ...
 const DesktopLayout = ({
-  // ... 
-
   patients,
   selectedPatient,
   selectedPatientData,
@@ -390,10 +392,12 @@ const DesktopLayout = ({
   generateDraft,
   toggleMedicationSelection,
   setEditingMed,
+  addNewMedication,
   toggleAlternatives,
   approve,
   hospital,
-  doctor
+  doctor,
+  logout
 }: DesktopLayoutProps) => (
   <div className="hidden lg:flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex-col">
     {/* Header */}
@@ -414,6 +418,9 @@ const DesktopLayout = ({
         <Link href="/settings" className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
           ⚙️ SETTINGS
         </Link>
+        <button onClick={logout} className="px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          🚪 LOGOUT
+        </button>
         <div className="px-2 py-1 bg-teal-100 text-teal-700 text-[10px] font-bold rounded-full">
           ● MULTI-DRUG
         </div>
@@ -448,7 +455,7 @@ const DesktopLayout = ({
                   </div>
                   <div className="text-left">
                     <p className={`text-xs font-bold ${selectedPatient === p.id ? 'text-teal-900' : 'text-slate-700'}`}>{p.name}</p>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">{p.age}Y • {p.conditions.split(',')[0]}{p.phone ? ` • ${p.phone}` : ''}</p>
+                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">{p.age}Y • {p.conditions.split(',')[0]}</p>
                   </div>
                 </div>
                 {selectedPatient === p.id && <span className="text-teal-500 text-xs">✓</span>}
@@ -521,15 +528,15 @@ const DesktopLayout = ({
         )}
       </div>
 
-      <div className="col-span-9 flex flex-col gap-3 min-h-0 overflow-hidden">
+      <div className="col-span-9 flex flex-col gap-3 min-h-0 overflow-hidden relative z-10">
 
         {/* Inline Clinical Notes Bar */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm flex items-center px-4 py-2 gap-4 shrink-0">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm flex items-center px-4 py-2 gap-4 shrink-0 relative z-50 pointer-events-auto">
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-sm">🩺</span>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Notes</p>
           </div>
-          <div className="flex-1 relative">
+          <div className="flex-1 relative z-10 pointer-events-auto">
             <input
               type="text"
               value={doctorNotes}
@@ -538,12 +545,13 @@ const DesktopLayout = ({
               placeholder="Fever for 3 days, cough, joint pain..."
               style={{ color: '#000' }}
               className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-teal-500/20 transition-all outline-none"
+              autoFocus={false}
             />
           </div>
           <button
-            onClick={generateDraft}
-            disabled={loading || !patientSummary}
-            className="px-4 py-2 bg-teal-500 text-white font-bold text-[10px] rounded-lg disabled:opacity-30 hover:bg-teal-600 transition-all shadow-sm uppercase tracking-widest shrink-0"
+            onClick={() => { console.log('Generate button clicked'); generateDraft(); }}
+            disabled={loading}
+            className="px-4 py-2 bg-teal-500 text-white font-bold text-[10px] rounded-lg disabled:opacity-30 hover:bg-teal-600 transition-all shadow-sm uppercase tracking-widest shrink-0 cursor-pointer"
           >
             {loading ? '...' : 'Enter'}
           </button>
@@ -562,22 +570,30 @@ const DesktopLayout = ({
                 </span>
               )}
             </div>
-            {medications.length > 0 && (
-              <div className="flex gap-4">
-                <button
-                  onClick={() => medications.forEach(m => !m.selected && toggleMedicationSelection(m.id))}
-                  className="text-[9px] font-bold text-teal-500 hover:text-teal-600 transition-colors uppercase tracking-wider"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => medications.forEach(m => m.selected && toggleMedicationSelection(m.id))}
-                  className="text-[9px] font-bold text-slate-300 hover:text-slate-400 transition-colors uppercase tracking-wider"
-                >
-                  Clear
-                </button>
-              </div>
-            )}
+            <div className="flex gap-4">
+              <button
+                onClick={addNewMedication}
+                className="text-[9px] font-bold text-blue-500 hover:text-blue-600 transition-colors uppercase tracking-wider"
+              >
+                + Add Med
+              </button>
+              {medications.length > 0 && (
+                <>
+                  <button
+                    onClick={() => medications.forEach(m => !m.selected && toggleMedicationSelection(m.id))}
+                    className="text-[9px] font-bold text-teal-500 hover:text-teal-600 transition-colors uppercase tracking-wider"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => medications.forEach(m => m.selected && toggleMedicationSelection(m.id))}
+                    className="text-[9px] font-bold text-slate-300 hover:text-slate-400 transition-colors uppercase tracking-wider"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Medicines List - Primary View */}
@@ -662,9 +678,11 @@ const MobileLayout = ({
   generateDraft,
   toggleMedicationSelection,
   setEditingMed,
+  addNewMedication,
   toggleAlternatives,
   approve,
-  setMobileStep
+  setMobileStep,
+  logout
 }: MobileLayoutProps) => (
   <div className="lg:hidden min-h-screen bg-slate-50 flex flex-col">
     {/* Mobile Header */}
@@ -675,7 +693,10 @@ const MobileLayout = ({
         </div>
         <span className="font-bold text-slate-900">ClinRx</span>
       </div>
-      <Link href="/settings" className="p-2 text-slate-400">⚙️</Link>
+      <div className="flex items-center gap-3">
+        <Link href="/settings" className="p-2 text-slate-400">⚙️</Link>
+        <button onClick={logout} className="p-2 text-red-500">🚪</button>
+      </div>
     </header>
 
     {/* Step Indicator */}
@@ -748,7 +769,7 @@ const MobileLayout = ({
               placeholder="Enter symptoms: fever, cough, acidity, back pain, UTI..."
               style={{ color: '#000' }}
               className="w-full h-32 p-4 text-slate-900 bg-white rounded-xl border border-teal-200 resize-none focus:ring-2 focus:ring-teal-500/30 text-base"
-              autoFocus
+              autoFocus={false}
             />
             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           </div>
@@ -781,6 +802,16 @@ const MobileLayout = ({
             <h1 className="text-2xl font-bold text-slate-900">Review Prescription</h1>
             <p className="text-slate-500 mt-1">{selectedCount} of {medications.length} medications selected</p>
           </div>
+
+          <div className="flex justify-center mb-1">
+            <button
+              onClick={addNewMedication}
+              className="px-4 py-2 bg-blue-50 border border-blue-200 text-blue-600 font-bold text-sm rounded-xl shadow-sm"
+            >
+              + Add Medication
+            </button>
+          </div>
+
 
           {/* Warnings */}
           {draft?.warnings && draft.warnings.length > 0 && (
@@ -872,6 +903,7 @@ export default function Dashboard() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [editingMed, setEditingMed] = useState<SelectableMedication | null>(null);
   const [patientsLoading, setPatientsLoading] = useState(true);
+  const { logout } = useAuth();
 
   // Mobile: Step-based navigation (0: Patient, 1: Notes, 2: Review)
   const [mobileStep, setMobileStep] = useState(0);
@@ -933,7 +965,13 @@ export default function Dashboard() {
   }, []);
 
   const generateDraft = useCallback(async () => {
-    if (!selectedPatient || !doctorNotes.trim()) {
+    console.log('generateDraft called', { selectedPatient, doctorNotesLength: doctorNotes.length });
+    if (!selectedPatient) {
+      alert('Please select a patient from the left column first');
+      setError('Please select a patient first');
+      return;
+    }
+    if (!doctorNotes.trim()) {
       setError('Please enter clinical notes');
       return;
     }
@@ -1009,6 +1047,29 @@ export default function Dashboard() {
 
   const removeMedication = (id: string) => {
     setMedications(meds => meds.filter(m => m.id !== id));
+  };
+
+  const addNewMedication = () => {
+    const newId = `manual-${Date.now()}`;
+    const newMed: SelectableMedication = {
+      id: newId,
+      drug: '',
+      category: 'primary',
+      dose: '',
+      frequency: 'OD',
+      duration: '5 days',
+      route: 'oral',
+      indication: 'Added by doctor',
+      reasoning: 'Manually added to prescription',
+      confidence: 1.0,
+      alternatives: [],
+      editable: true,
+      selected: true,
+      showAlternatives: false,
+      in_stock: true
+    };
+    setMedications(prev => [...prev, newMed]);
+    setEditingMed(newMed);
   };
 
   const approve = () => {
@@ -1107,10 +1168,12 @@ export default function Dashboard() {
         generateDraft={generateDraft}
         toggleMedicationSelection={toggleMedicationSelection}
         setEditingMed={setEditingMed}
+        addNewMedication={addNewMedication}
         toggleAlternatives={toggleAlternatives}
         approve={approve}
         hospital={hospital}
         doctor={doctor}
+        logout={logout}
       />
 
       <MobileLayout
@@ -1130,9 +1193,11 @@ export default function Dashboard() {
         generateDraft={generateDraft}
         toggleMedicationSelection={toggleMedicationSelection}
         setEditingMed={setEditingMed}
+        addNewMedication={addNewMedication}
         toggleAlternatives={toggleAlternatives}
         approve={approve}
         setMobileStep={setMobileStep}
+        logout={logout}
       />
 
       {editingMed && (
