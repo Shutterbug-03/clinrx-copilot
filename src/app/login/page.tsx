@@ -61,6 +61,12 @@ export default function LoginPage() {
             Password: password,
         });
 
+        if (!userPool) {
+            setError('AWS Cognito is not configured. Please check environment variables.');
+            setLoading(false);
+            return;
+        }
+
         const user = new CognitoUser({
             Username: email,
             Pool: userPool,

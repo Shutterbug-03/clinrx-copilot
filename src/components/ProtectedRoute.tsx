@@ -14,7 +14,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (authLoading) return;
 
-        const cognitoUser = userPool.getCurrentUser();
+        const cognitoUser = userPool?.getCurrentUser();
 
         if (!cognitoUser && !user) {
             router.push('/login');
