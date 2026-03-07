@@ -11,9 +11,10 @@ export class BedrockAdapter {
     private modelId: string;
     private openai: OpenAI | null = null;
 
-    constructor(region: string = "us-east-1") {
-        this.client = new BedrockRuntimeClient({ region });
-        // Switching to Llama 3 70B in us-east-1 as it is accessible via credits
+    constructor(region?: string) {
+        const selectedRegion = region || process.env.BEDROCK_REGION || process.env.AWS_REGION || "us-east-1";
+        this.client = new BedrockRuntimeClient({ region: selectedRegion });
+        // Switching to Llama 3 70B - usually available in us-east-1 and us-west-2
         this.modelId = "meta.llama3-70b-instruct-v1:0";
     }
 

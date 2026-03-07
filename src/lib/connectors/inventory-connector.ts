@@ -159,7 +159,9 @@ class ExternalPharmacyAdapter implements InventoryAdapter {
     private adapter = new BedrockAdapter();
 
     async searchDrug(query: string): Promise<InventoryItem[]> {
-        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+        // In production (Lambda/Amplify), credentials are provided via IAM roles.
+        // We check for region or keys to ensure we are in a configured environment.
+        if (!process.env.AWS_REGION && !process.env.AWS_ACCESS_KEY_ID) {
             return [];
         }
 
