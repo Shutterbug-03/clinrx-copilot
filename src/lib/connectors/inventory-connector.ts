@@ -103,24 +103,6 @@ class SupabaseInventoryAdapter implements InventoryAdapter {
                 }
             }
 
-            // DYNAMIC MOCK: If the AI prescribes a drug that isn't in our hardcoded list or DB,
-            // we dynamically generate a stock entry so the MVP demo always shows it as "IN STOCK".
-            if (merged.length === 0) {
-                const capitalizedQuery = query.charAt(0).toUpperCase() + query.slice(1).toLowerCase();
-                merged.push({
-                    drug_id: `mock-${query.replace(/\s+/g, '-')}`,
-                    brand: `${capitalizedQuery} (Generic)`,
-                    generic: capitalizedQuery,
-                    strength: "Standard",
-                    formulation: "tablet",
-                    quantity_available: Math.floor(Math.random() * 500) + 100,
-                    price: Math.floor(Math.random() * 150) + 30,
-                    location: "Main Pharmacy",
-                    source: "hospital",
-                    last_updated: new Date().toISOString()
-                });
-            }
-
             return merged;
 
         } catch (err) {
