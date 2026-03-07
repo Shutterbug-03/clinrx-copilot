@@ -181,7 +181,7 @@ export async function generateMultiDrugPrescription(
     }
 
     // Step 5: AI-powered enhancement (if available)
-    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    try {
         const aiEnhancements = await getAIEnhancements(
             patientSummary,
             doctorNotes,
@@ -192,6 +192,8 @@ export async function generateMultiDrugPrescription(
         if (aiEnhancements.additionalWarnings) {
             warnings.push(...aiEnhancements.additionalWarnings);
         }
+    } catch (e) {
+        console.warn('[MultiDrug] AI Enhancements skipped or failed.');
     }
 
     const alternativesMap = await getAllAlternativesMapped(suggestedMeds.map(m => m.drug), patientSummary);
@@ -263,10 +265,6 @@ async function aiSelectMedications(
     context: CompressedContext,
     doctorNotes: string
 ): Promise<AISuggestion[]> {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-        console.warn('[MultiDrug] Missing AWS Credentials, unable to call Bedrock. Returning empty suggestions.');
-        return [];
-    }
 
     try {
         const patientSummaryStr = `
@@ -458,7 +456,6 @@ async function getAIEnhancements(
     medications: PrescriptionMedication[],
     conditions: string[]
 ): Promise<{ additionalWarnings?: { type: string; message: string; drug?: string }[] }> {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return {};
 
     try {
         const prompt = `
